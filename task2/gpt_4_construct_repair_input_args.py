@@ -1,7 +1,7 @@
 import json
 import random
 from transformers import AutoTokenizer
-import utils_
+import utils
 from prompts import THINKING_SYSTEM, AGENTLESS_REPAIR
 from datasets import load_dataset
 import argparse
@@ -15,8 +15,8 @@ def count_tokens(tokenizer, messages_or_prompt):
 
 
 def get_file_contents_and_tokens(tokenizer, instance_id, origin_instance_id,pred_files: list[str]) -> dict[str, str]:
-    structure = utils_.get_repo_structure(instance_id)
-    repo_file_contents, _, _ = utils_.get_full_file_paths_and_classes_and_functions(
+    structure = utils.get_repo_structure(instance_id)
+    repo_file_contents, _, _ = utils.get_full_file_paths_and_classes_and_functions(
         structure
     )
     repo_file_contents_dict = {path: lines for path, lines in repo_file_contents}
@@ -156,8 +156,8 @@ def main(tokenizer_path, save_path, dataset_jsonl, max_input_tokens, max_noise_f
     gt_files_count = [input_f - noise for input_f, noise in zip(input_files_count, noise_files_count)]
     print("gt_files_count min:", min(gt_files_count), "max:", max(gt_files_count), "mean:", sum(gt_files_count)/len(gt_files_count))
 """
-python /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/script/gpt_3_construct_repair_input_args.py \
---tokenizer_path /mnt/hdfs/tiktok_aiic/user/codeai/hf_models/Qwen2.5-Coder-7B-Instruct \
+python /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/task2/gpt_4_construct_repair_input_args.py \
+--tokenizer_path /mnt/hdfs/tiktok_aiic/user/codeai/hf_models/Qwen2.5-Coder-32B-Instruct \
 --save_path /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/prcessed_data_v1/9_ready_train_gpt4o.jsonl \
 --dataset_jsonl /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/prcessed_data_v1/8_seg_bug_success_with_noise_gpt4o.jsonl \
 --max_noise_file_num 3

@@ -39,5 +39,5 @@ DEFAULT_PATH = "/opt/tiger/expr/true_repo_commit"
 NEW_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
 GENERATE_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/prcessed_data_v1'
 OUTPUT_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/model_output_v1'
-TEST_PATH_PATH='/opt/tiger/expr/test_patch/'
+TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 

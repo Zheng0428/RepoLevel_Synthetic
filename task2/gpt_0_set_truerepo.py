@@ -28,8 +28,10 @@ def generate_true_repo(data):
     original_patch = data.get('patch', '')
     
     # 设置repo路径
-    default_path = "/opt/tiger/expr/repo_commit"
-    source_testbed = os.path.join(default_path, repo_name)
+    source_testbed = os.path.join(DEFAULT_PATH, repo_name)
+    
+    # 设置正确的repo路径
+    true_testbed = os.path.join(TRUE_DEFAULT_PATH, repo_name)
     
     if not os.path.exists(source_testbed):
         print(f"Source testbed not found: {source_testbed}")
@@ -39,14 +41,9 @@ def generate_true_repo(data):
     original_patch_files = get_all_filenames(original_patch)
     modified_files = original_patch_files["modified"] + original_patch_files["added"]
     
-    # 获取GPT生成的bug文件路径
-    gpt_bug_files = [bug_file.file_path for bug_file in result.buggy_files]
-    
-    # 合并需要复制的文件
-    files_to_copy = list(set(modified_files + gpt_bug_files))
     
     try:
-        with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
+        with TempTestbed(source_testbed=source_testbed, copy_files=modified_files) as temp_testbed:
             temp_dir = temp_testbed.temp_dir
             # 第一步：应用原始patch，让repo变成正确状态
             with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as original_patch_file:

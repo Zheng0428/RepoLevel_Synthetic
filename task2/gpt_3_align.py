@@ -1,5 +1,5 @@
 import json
-from envs import DEFAULT_PATH
+from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH
 import os, re
 from utils import fake_git_repo
 import random
@@ -241,12 +241,16 @@ if __name__ == "__main__":
             new_data['reserve_patch'] = data['gpt_reverse_patch']
             new_data['repo'] = data['repo']
             new_data['base_commit'] = ''.join(random.choices('0123456789abcdef', k=40))  # 生成一个新的40位十六进制哈希值
-            new_data['instance_id'] = '_'.join(data['instance_id'].split('-')[:-1]) + '-' + new_data['base_commit'][:3]
+            # new_data['instance_id'] = '_'.join(data['instance_id'].split('-')[:-1]) + '__' + new_data['base_commit'][:6]
+            new_data['instance_id'] = new_data['repo'].replace("/", "__")+"__"+ new_data['base_commit'][:6]
             new_data['hints_text'] = data['hints_text']
-            # new_data['test_patch'] = data['test_patch'].strip() + "\n" + data['gpt_valid_test_patch']
-            new_data['test_patch'] = data['gpt_valid_test_patch']
-            with open(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff', 'w') as f:
-                f.write(new_data['test_patch'])
+            new_data['origin_test_patch'] = data['test_patch']
+            new_data['test_patch'] = data['test_patch'].strip() + "\n" + data['gpt_valid_test_patch']
+            # new_data['test_patch'] = data['test_patch']
+            if os.path.exists(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff'):
+                os.remove(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff')
+            # with open(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff', 'w') as f:
+            #     f.write(new_data['test_patch'])
             new_data['problem_statement'] = data['gpt_problem_statement']
             new_data['version'] = data['version']
             new_data['environment_setup_commit'] = data['environment_setup_commit']
@@ -265,7 +269,7 @@ if __name__ == "__main__":
             instance_id = new_data['instance_id']
             
             repo_playground = os.path.join(DEFAULT_PATH, new_data['repo_base_name'])
-            new_repo_playground = os.path.join(DEFAULT_PATH, new_data['instance_id'])
+            new_repo_playground = os.path.join(ORIGIN_DEFAULT_PATH, new_data['instance_id'])
             
             # 使用新的函数来应用patches并创建buggy repo
             success = apply_patches_and_create_buggy_repo(new_data, repo_playground, new_repo_playground)

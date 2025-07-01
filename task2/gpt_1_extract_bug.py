@@ -212,15 +212,15 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
         return data
     
     # 获取原始patch修改的文件
-    original_patch_files = get_all_filenames(original_patch)
-    modified_files = original_patch_files["modified"] + original_patch_files["added"]
+    # original_patch_files = get_all_filenames(original_patch)
+    # modified_files = original_patch_files["modified"] + original_patch_files["added"]
     
     # 获取GPT生成的bug文件路径
     gpt_bug_files = [bug_file.file_path for bug_file in result.buggy_files]
     
     # 合并需要复制的文件
-    files_to_copy = list(set(modified_files + gpt_bug_files))
-    
+    # files_to_copy = list(set(modified_files + gpt_bug_files))
+    files_to_copy = gpt_bug_files
     try:
         with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
             temp_dir = temp_testbed.temp_dir
@@ -236,9 +236,9 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
                 print(f"Unittest file path conflict resolved: {result.unittest_file_path} -> {resolved_unittest_path}")
             
             # 第一步：应用原始patch，让repo变成正确状态
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as original_patch_file:
-                original_patch_file.write(original_patch)
-                original_patch_file_path = original_patch_file.name
+            # with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as original_patch_file:
+            #     original_patch_file.write(original_patch)
+            #     original_patch_file_path = original_patch_file.name
             
             try:
                 # # 应用原始patch
@@ -308,7 +308,8 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
                 
             finally:
                 # 清理临时patch文件
-                os.unlink(original_patch_file_path)
+                pass
+                # os.unlink(original_patch_file_path)
                 
     except Exception as e:
         print(f"Error processing bug data: {str(e)}")
@@ -317,15 +318,14 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
 
 # --- Modified process_jsonl function ---
 def process_jsonl(input_path, output_path):
-    default_path = "/opt/tiger/expr/repo_commit"
-    a=b=c=d=e_=f_=0
-    false_n = 0           # Counter for responses with bad/missing JSON bugs
-    total_repo = 0
-    total_script = 0
-    total_unit = 0
-    total_mini_bug = 0
-    total_lines_processed = 0
-    total_valid_responses = 0
+    # a=b=c=d=e_=f_=0
+    # false_n = 0           # Counter for responses with bad/missing JSON bugs
+    # total_repo = 0
+    # total_script = 0
+    # total_unit = 0
+    # total_mini_bug = 0
+    # total_lines_processed = 0
+    # total_valid_responses = 0
     num_processed_lines_in_file = 0
     # --- Loop through each input file path provided ---
     if not os.path.exists(input_path):
@@ -353,7 +353,7 @@ def process_jsonl(input_path, output_path):
                 print('#'*50)
                 
                 result = parse_bug_response(response)
-                print (result.buggy_files[0].code)
+                # print (result.buggy_files[0].code)
                 if result is not None:
                     # 处理生成patch的逻辑
                     processed_data = generate_patches_for_bug_data(data, result)

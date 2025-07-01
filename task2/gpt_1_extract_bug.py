@@ -205,8 +205,7 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
     original_patch = data.get('patch', '')
     
     # 设置repo路径
-    default_path = "/opt/tiger/expr/repo_commit"
-    source_testbed = os.path.join(default_path, repo_name)
+    source_testbed = os.path.join(DEFAULT_PATH, repo_name)
     
     if not os.path.exists(source_testbed):
         print(f"Source testbed not found: {source_testbed}")
@@ -242,13 +241,13 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse) -> dict
                 original_patch_file_path = original_patch_file.name
             
             try:
-                # 应用原始patch
-                patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {original_patch_file_path}'
-                result_apply = subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
+                # # 应用原始patch
+                # patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {original_patch_file_path}'
+                # result_apply = subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
                 
-                if result_apply.returncode != 0:
-                    print(f"Failed to apply original patch: {result_apply.stderr}")
-                    return data
+                # if result_apply.returncode != 0:
+                #     print(f"Failed to apply original patch: {result_apply.stderr}")
+                #     return data
                 
                 # 第二步：读取修复后的文件内容（正确状态）
                 fixed_file_contents = {}

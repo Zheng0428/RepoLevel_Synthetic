@@ -2,7 +2,7 @@ import json
 import os
 import subprocess
 import shutil
-from envs import DEFAULT_PATH, TRUE_DEFAULT_PATH
+from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH
 from envs import OUTPUT_DATA_PATH
 from temp_testbed import get_all_filenames
 import tempfile
@@ -27,8 +27,8 @@ def generate_true_repo(data):
         return data
     
     # 设置repo路径
-    source_testbed = os.path.join(DEFAULT_PATH, repo_name)
-    true_testbed = os.path.join(TRUE_DEFAULT_PATH, repo_name)
+    source_testbed = os.path.join(ORIGIN_DEFAULT_PATH, repo_name)
+    true_testbed = os.path.join(DEFAULT_PATH, repo_name)
     
     if not os.path.exists(source_testbed):
         print(f"Source testbed not found: {source_testbed}")
@@ -36,7 +36,7 @@ def generate_true_repo(data):
     
     try:
         # 确保true_testbed目录存在
-        os.makedirs(TRUE_DEFAULT_PATH, exist_ok=True)
+        os.makedirs(DEFAULT_PATH, exist_ok=True)
         
         # 如果true_testbed已存在，先删除
         if os.path.exists(true_testbed):

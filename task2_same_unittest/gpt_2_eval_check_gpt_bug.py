@@ -406,12 +406,13 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
         }
     
     # 创建临时patch文件路径
-    gpt_bug_patch_path = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}/gpt_bug_patch.diff"
+    gpt_bug_dir = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}"
+    gpt_bug_patch_path = f"{gpt_bug_dir}/gpt_bug_patch.diff"
     init_test_patch_path = f"{GENERATE_DATA_PATH}/gpt-init-eval/{instance_id}/test_patch.diff"
     # original_patch_path = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-bug-eval/{instance_id}/original_patch.diff"
     
     # 创建目录
-    os.makedirs(os.path.dirname(gpt_bug_patch_path), exist_ok=True)
+    os.makedirs(os.path.dirname(gpt_bug_dir), exist_ok=True)
     
     # 写入patch文件
     with open(gpt_bug_patch_path, 'w') as f:

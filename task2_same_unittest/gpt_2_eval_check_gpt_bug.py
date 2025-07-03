@@ -101,7 +101,7 @@ def run_command_with_timeout(instance_id, cmd, timeout) -> tuple[bool, bool]:
         return False, False
 
 
-def make_test_command_for_gpt(instance, env_dir, tmp_dir) -> str:
+def make_test_command_for_gpt(instance, env_dir, tmp_dir, test_patch) -> str:
     """为GPT生成的测试创建测试命令"""
     pytest_path = os.path.join(env_dir, "bin", "pytest")
     test_cmd = (
@@ -113,8 +113,8 @@ def make_test_command_for_gpt(instance, env_dir, tmp_dir) -> str:
     
     # 获取GPT测试patch中的文件指令
     diff_pat = r"diff --git a/.* b/(.*)"
-    gpt_test_patch = instance["gpt_test_patch"]
-    directives = re.findall(diff_pat, gpt_test_patch)
+    # test_patch = test_patch
+    directives = re.findall(diff_pat, test_patch)
     directives = [
         d for d in directives if not any(d.endswith(ext) for ext in NON_TEST_EXTS)
     ]
@@ -220,12 +220,11 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     test_patch = instance.get('test_patch', '')  # GPT生成的测试patch
     
     # 创建临时patch文件路径
-    init_test_dir = f"{GENERATE_DATA_PATH}/init-eval/{instance_id}"
-    init_test_patch_path = f"{init_test_dir}/test_patch.diff"
+    init_test_patch_path = f"{GENERATE_DATA_PATH}/init-eval/{instance_id}/test_patch.diff"
     # original_patch_path = f"{init_test_dir}/original_patch.diff"
     
     # 创建目录
-    os.makedirs(init_test_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(init_test_patch_path), exist_ok=True)
     
     # 写入patch文件
     with open(init_test_patch_path, 'w') as f:
@@ -242,7 +241,8 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     files_to_copy = list(set(
         original_patch_files["modified"] + 
         original_patch_files["added"] +
-        test_files["added"]  # 测试文件通常是新增的
+        test_files["modified"] + 
+        test_files["added"]
     ))
     
     source_testbed = os.path.join(DEFAULT_PATH, repo_commit)
@@ -260,7 +260,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
             temp_pytest = temp_testbed.temp_pytest
             
             # 构建测试命令
-            test_command = make_test_command_for_gpt(instance, conda_path, temp_pytest)
+            test_command = make_test_command_for_gpt(instance, conda_path, temp_pytest, test_patch)
             
             # 确保使用绝对路径
             log_path = os.path.abspath(log_path)
@@ -406,13 +406,12 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
         }
     
     # 创建临时patch文件路径
-    gpt_bug_dir = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}"
-    gpt_bug_patch_path = f"{gpt_bug_dir}/gpt_bug_patch.diff"
+    gpt_bug_patch_path = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}/gpt_bug_patch.diff"
     init_test_patch_path = f"{GENERATE_DATA_PATH}/gpt-init-eval/{instance_id}/test_patch.diff"
     # original_patch_path = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-bug-eval/{instance_id}/original_patch.diff"
     
     # 创建目录
-    os.makedirs(os.path.dirname(gpt_bug_dir), exist_ok=True)
+    os.makedirs(os.path.dirname(gpt_bug_patch_path), exist_ok=True)
     
     # 写入patch文件
     with open(gpt_bug_patch_path, 'w') as f:
@@ -449,7 +448,7 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
             temp_pytest = temp_testbed.temp_pytest
             
             # 构建测试命令
-            test_command = make_test_command_for_gpt(instance, conda_path, temp_pytest)
+            test_command = make_test_command_for_gpt(instance, conda_path, temp_pytest, instance['test_patch'])
             
             # 确保使用绝对路径
             log_path = os.path.abspath(log_path)

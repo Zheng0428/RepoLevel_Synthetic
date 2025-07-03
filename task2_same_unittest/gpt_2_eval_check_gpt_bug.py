@@ -532,186 +532,6 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
 
 ##################################################################################################################################
 
-
-def extract_perfect_tests_unittest(perfect_tests_results: dict, original_data: dict) -> dict:
-    """
-    从perfect_tests结果中提取测试，生成完整的unittest代码
-    
-    Args:
-        perfect_tests_results: analyze_combined_results返回的perfect_tests结果
-        original_data: 原始数据，包含gpt_test_patch信息
-        
-    Returns:
-        dict: 包含instance_id到unittest代码的映射
-    """
-    unittest_results = {}
-    
-    for instance_id, result_data in perfect_tests_results.items():
-        perfect_tests_list = result_data.get('perfect_tests', [])
-        
-        if not perfect_tests_list:
-            continue
-        
-        # 从original_data中获取对应的实例数据
-        instance_data = None
-        for data in original_data:
-            if data.get('instance_id') == instance_id:
-                instance_data = data
-                break
-        
-        if not instance_data:
-            logger.warning(f"Could not find original data for instance {instance_id}")
-            continue
-        
-        gpt_test_patch = instance_data.get('gpt_test_patch', '')
-        if not gpt_test_patch:
-            logger.warning(f"No gpt_test_patch found for instance {instance_id}")
-            continue
-        
-        # 解析gpt_test_patch以获取测试文件内容
-        test_files = parse_test_patch_content(gpt_test_patch)
-        
-        if not test_files:
-            logger.warning(f"Could not parse test files from gpt_test_patch for instance {instance_id}")
-            continue
-        
-        # 为每个perfect test创建过滤后的测试内容
-        good_tests = {}
-        
-        for test_file_path, test_content in test_files.items():
-            # 为当前文件找到相关的perfect tests
-            relevant_perfect_tests = []
-            for perfect_test in perfect_tests_list:
-                # perfect_test格式可能是 "test_file.py::TestClass::test_method" 或 "test_file.py::test_function"
-                if perfect_test.startswith(test_file_path.replace('.py', '').replace('/', '__')):
-                    relevant_perfect_tests.append(perfect_test)
-            
-            if not relevant_perfect_tests:
-                continue
-            
-            # 转换perfect_tests格式为_filter_test_content需要的格式
-            class_function_specs = []
-            for perfect_test in relevant_perfect_tests:
-                parts = perfect_test.split('::')
-                if len(parts) >= 2:
-                    # 去除文件名部分，只保留类::方法 或 ::方法
-                    if len(parts) == 2:
-                        # 格式: file::function
-                        class_function_specs.append('::' + parts[1])
-                    elif len(parts) == 3:
-                        # 格式: file::class::method
-                        class_function_specs.append(parts[1] + '::' + parts[2])
-            
-            if class_function_specs:
-                # 过滤测试内容，只保留perfect tests
-                filtered_content = _filter_test_content(test_content, class_function_specs)
-                good_tests[test_file_path] = {
-                    'content': filtered_content,
-                    'class::function': class_function_specs
-                }
-        
-        if good_tests:
-            # 生成合并的测试脚本
-            if len(good_tests) == 1:
-                combined_unittest = next(iter(good_tests.values()))['content']
-            else:
-                combined_unittest = _generate_combined_test_script(good_tests)
-            
-            unittest_results[instance_id] = {
-                'gpt_final_unittest': combined_unittest,
-                'perfect_tests': perfect_tests_list,
-                'test_files_used': list(good_tests.keys())
-            }
-    
-    return unittest_results
-
-
-def parse_test_patch_content(gpt_test_patch: str) -> dict:
-    """
-    解析gpt_test_patch，提取测试文件的内容
-    
-    Args:
-        gpt_test_patch: GPT生成的测试patch内容
-        
-    Returns:
-        dict: 文件路径到内容的映射
-    """
-    test_files = {}
-    
-    # 分割patch内容，按文件处理
-    file_sections = re.split(r'^diff --git', gpt_test_patch, flags=re.MULTILINE)
-    
-    for section in file_sections:
-        if not section.strip():
-            continue
-        
-        # 如果不是以diff --git开头，添加回去（除了第一个section）
-        if not section.startswith(' a/') and not section.startswith('diff --git'):
-            section = 'diff --git ' + section
-        
-        # 提取文件路径 - 修复正则表达式
-        file_match = re.search(r'diff --git a/(.+) b/(.+)', section)
-        if not file_match:
-            # 尝试另一种格式：直接从文件名开始
-            file_match = re.search(r'^(.+\.py) b/(.+\.py)', section)
-        
-        if not file_match:
-            continue
-        
-        file_path = file_match.group(2) if file_match.group(2) else file_match.group(1)
-        
-        # 只处理.py文件
-        if not file_path.endswith('.py'):
-            continue
-        
-        # 提取文件内容
-        lines = section.split('\n')
-        content_lines = []
-        in_content = False
-        
-        for line in lines:
-            # 检查是否到达内容区域
-            if line.startswith('@@') and '-0,0' in line and '+1,' in line:
-                # 这是新文件的标记
-                in_content = True
-                continue
-            elif line.startswith('@@'):
-                in_content = True
-                continue
-            elif line.startswith('+++') and '/dev/null' not in line:
-                # 跳过文件头信息
-                continue
-            elif line.startswith('---') or line.startswith('index ') or line.startswith('new file mode'):
-                # 跳过文件头信息
-                continue
-            
-            if in_content:
-                if line.startswith('+') and not line.startswith('+++'):
-                    # 移除开头的+号，这是新增的内容
-                    content_lines.append(line[1:])
-                elif line.startswith(' ') and len(line) > 1:
-                    # 上下文行（空格开头）
-                    content_lines.append(line[1:])
-                elif line.startswith('-'):
-                    # 删除的行，忽略
-                    continue
-                elif not line.startswith(('+', '-', ' ', '\\', '@')):
-                    # 其他行也可能是内容
-                    content_lines.append(line)
-        
-        if content_lines:
-            # 清理内容：移除开头和结尾的空行
-            while content_lines and not content_lines[0].strip():
-                content_lines.pop(0)
-            while content_lines and not content_lines[-1].strip():
-                content_lines.pop()
-            
-            if content_lines:
-                test_files[file_path] = '\n'.join(content_lines)
-    
-    return test_files
-
-
 def save_final_results_to_jsonl(perfect_tests_results: dict, original_data: dict, output_file: str):
     """
     保存最终结果到jsonl文件
@@ -721,31 +541,24 @@ def save_final_results_to_jsonl(perfect_tests_results: dict, original_data: dict
         original_data: 原始数据列表
         output_file: 输出文件路径
     """
-    # 提取unittest代码
-    unittest_results = extract_perfect_tests_unittest(perfect_tests_results, original_data)
-    
     # 创建输出数据
     output_data = []
-    
-    for data in original_data:
-        instance_id = data.get('instance_id')
+    # unittest_results = extract_perfect_tests_unittest(perfect_tests_results, original_data)
+    for instance_id, result_data in perfect_tests_results.items():
+        for data in original_data:
+            if instance_id == data['instance_id']:
+                new_data = data.copy()
+                init_passed_tests = set(result_data['init_result'].get('tests_status', {}).get('PASSED', []))
+                
+                bug_passed_tests = set(result_data['bug_result'].get('tests_status', {}).get('PASSED', []))
+                bug_failed_tests = set(result_data['bug_result'].get('tests_status', {}).get('FAILED', []))
+
+                new_data['FAIL_TO_PASS'] = list(init_passed_tests & bug_failed_tests)
+                new_data['PASS_TO_PASS'] = list(init_passed_tests & bug_passed_tests)
+                output_data.append(new_data)
+                break
         
-        if instance_id in unittest_results:
-            # 复制原始数据
-            new_data = data.copy()
-            
-            # 添加生成的unittest信息
-            unittest_info = unittest_results[instance_id]
-            gpt_valid_test_patch = fake_git_repo(
-                file_pathes=unittest_info['test_files_used'],
-                old_contents=[""],
-                new_contents=[unittest_info['gpt_final_unittest']],
-                files_exist=False
-            )
-            new_data['gpt_valid_test_patch'] = gpt_valid_test_patch
-            new_data['gpt_perfect_tests'] = unittest_info['perfect_tests']
-            
-            output_data.append(new_data)
+        
     
     # 保存到jsonl文件
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -901,7 +714,9 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # 从extract_bug_gpt.py的输出文件中读取数据
+    test = False
     data_path = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl'
+    final_output_file = f"{GENERATE_DATA_PATH}/gpt_2_finish_bug_gpt4o.jsonl"
     tasks = []
     
     try:
@@ -919,29 +734,29 @@ if __name__ == "__main__":
     
     logger.info(f"Loaded {len(tasks)} tasks with GPT patches")
     if tasks:
-        # 先运行test_init，检查修复状态下GPT测试是否能通过
-        logger.info("Starting init state evaluation...")
-        init_results = test_init(tasks, 32, 45)
-        
-        # 再运行test_gpt_bug，检查引入bug后GPT测试是否能检测到bug
-        logger.info("Starting GPT bug evaluation...")
-        gpt_bug_results = test_gpt_bug(tasks, 32, 45)
-        
-        # 分析合并结果
-        logger.info("Analyzing combined results...")
-        analysis_results = analyze_combined_results(init_results, gpt_bug_results)
-
         ## test
-        # EXP_PATH = '/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/test_log/py-gpt-bug-patch-commit_2025-06-16-12_combined'
-        # final_results_path = f"{EXP_PATH}/final_analysis_results.json"
-        # with open(final_results_path, "r") as f:
-        #     analysis_results = json.load(f)
-        # analysis_results = analysis_results['categorized_results']
-
+        if test:
+            EXP_PATH = '/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/test_log/py-gpt-bug-patch-commit_2025-07-03-07_combined'
+            final_results_path = f"{EXP_PATH}/final_analysis_results.json"
+            with open(final_results_path, "r") as f:
+                analysis_results = json.load(f)
+            analysis_results = analysis_results['categorized_results']
+        else:
+            # 先运行test_init，检查修复状态下GPT测试是否能通过
+            logger.info("Starting init state evaluation...")
+            init_results = test_init(tasks, 32, 45)
+            
+            # 再运行test_gpt_bug，检查引入bug后GPT测试是否能检测到bug
+            logger.info("Starting GPT bug evaluation...")
+            gpt_bug_results = test_gpt_bug(tasks, 32, 45)
+            
+            # 分析合并结果
+            logger.info("Analyzing combined results...")
+            analysis_results = analyze_combined_results(init_results, gpt_bug_results)
         
         # 新增：生成最终的unittest代码并保存到jsonl
         logger.info("Generating final unittest code...")
-        final_output_file = f"{GENERATE_DATA_PATH}/7_finish_bug_gpt4o.jsonl"
+        
         final_data = save_final_results_to_jsonl(
             analysis_results['perfect_tests'], 
             tasks, 

@@ -4,7 +4,7 @@ import glob
 from collections import defaultdict  
 
 # Directory containing JSONL files  
-result_dir = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/prcessed_data_v1/10_pass64_gpt4o/gpt4o/result_*.jsonl"  
+result_dir = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/5_pass64_gpt4o/Qwen2.5-Coder-32B-Instruct/result_*.jsonl"  
 
 
 

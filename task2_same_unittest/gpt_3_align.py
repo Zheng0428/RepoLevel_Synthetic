@@ -221,8 +221,8 @@ if __name__ == "__main__":
                        help='Whether to save project structure to files')
     args = parser.parse_args()
     dataset = []
-    input_file = f'{GENERATE_DATA_PATH}/7_finish_bug_gpt4o.jsonl'
-    output_jsonl_file = f'{GENERATE_DATA_PATH}/8_seg_bug_success_with_noise_gpt4o.jsonl'
+    input_file = f'{GENERATE_DATA_PATH}/gpt_2_finish_bug_gpt4o.jsonl'
+    output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_3_seg_bug_success_with_noise_gpt4o.jsonl'
     if not os.path.exists(TEST_PATCH_PATH):
         os.makedirs(TEST_PATCH_PATH)
     with open(input_file, 'r') as f:
@@ -241,12 +241,9 @@ if __name__ == "__main__":
             new_data['reserve_patch'] = data['gpt_reverse_patch']
             new_data['repo'] = data['repo']
             new_data['base_commit'] = ''.join(random.choices('0123456789abcdef', k=40))  # 生成一个新的40位十六进制哈希值
-            # new_data['instance_id'] = '_'.join(data['instance_id'].split('-')[:-1]) + '__' + new_data['base_commit'][:6]
             new_data['instance_id'] = new_data['repo'].replace("/", "__")+"__"+ new_data['base_commit'][:6]
             new_data['hints_text'] = data['hints_text']
-            new_data['origin_test_patch'] = data['test_patch']
-            new_data['test_patch'] = data['test_patch'].strip() + "\n" + data['gpt_valid_test_patch']
-            # new_data['test_patch'] = data['test_patch']
+            new_data['test_patch'] = data['test_patch']
             if os.path.exists(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff'):
                 os.remove(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff')
             # with open(TEST_PATCH_PATH+new_data['instance_id']+'__test_patch.diff', 'w') as f:
@@ -254,8 +251,8 @@ if __name__ == "__main__":
             new_data['problem_statement'] = data['gpt_problem_statement']
             new_data['version'] = data['version']
             new_data['environment_setup_commit'] = data['environment_setup_commit']
-            new_data['FAIL_TO_PASS'] = data['gpt_perfect_tests']
-            new_data['PASS_TO_PASS'] = data['PASS_TO_PASS'] + data['FAIL_TO_PASS']
+            new_data['FAIL_TO_PASS'] = data['FAIL_TO_PASS']
+            new_data['PASS_TO_PASS'] = data['PASS_TO_PASS']
             test_patch_files = get_all_filenames(data['gpt_patch'])
             new_data['modified_files'] = test_patch_files["modified"]+test_patch_files['added']+test_patch_files["removed"]
             new_data['extra_related_files'] = data['noise_files']
@@ -264,6 +261,7 @@ if __name__ == "__main__":
 
 
             save_structure = f'{GENERATE_DATA_PATH}/structure'
+            os.makedirs(save_structure, exist_ok=True)
             repo_name = new_data['repo']
             commit_id = new_data['base_commit']
             instance_id = new_data['instance_id']

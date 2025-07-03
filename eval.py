@@ -15,8 +15,6 @@ from temp_testbed import TempTestbed, get_all_filenames
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Union, Tuple
 
-GENERATE_DATA_PATH = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/prcessed_data_v1"
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

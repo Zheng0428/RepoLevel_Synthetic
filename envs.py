@@ -37,7 +37,8 @@ RUN_NAME = os.environ.get('RUN_NAME','sweb_eval')
 ORIGIN_DEFAULT_PATH = "/opt/tiger/expr/repo_commit"
 DEFAULT_PATH = "/opt/tiger/expr/true_repo_commit"
 NEW_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
-GENERATE_DATA_PATH='/mnt/hdfs/tiktok_aiic/user/tianyu/RepoLevel_Synthetic_Data'
+GENERATE_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data'
+LOG_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data'
 OUTPUT_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/model_output_v1'
 TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 

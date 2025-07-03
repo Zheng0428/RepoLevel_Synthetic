@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Union, Tuple
 
 from utils import fake_git_repo
-from eval import GENERATE_DATA_PATH
+from envs import GENERATE_DATA_PATH, LOG_PATH
 
 # Import functions from 3_2_extract_goodtasks.py
 import sys
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # Constants - Miscellaneous
 date = time.strftime("%Y-%m-%d-%H")
 
-EXP_PATH=f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/test_log/py-gpt-bug-patch-commit_{date}_combined"
+EXP_PATH=f"{LOG_PATH}/test_log/py-gpt-bug-patch-commit_{date}_combined"
     
 EXPR_PATH = os.getenv("EXPR_PATH", "/opt/tiger/expr")
 ENV_DIR=f"{EXPR_PATH}/conda_env/"
@@ -217,47 +217,38 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     
     # 获取patches
     original_patch = instance.get('patch', '')  # 原始修复patch
-    gpt_test_patch = instance.get('gpt_test_patch', '')  # GPT生成的测试patch
-    
-    if not gpt_test_patch:
-        return {
-            instance_id: {
-                "success": False,
-                "error": "Missing gpt_test_patch",
-                "timed_out": False
-            }
-        }
+    test_patch = instance.get('test_patch', '')  # GPT生成的测试patch
     
     # 创建临时patch文件路径
-    init_test_dir = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-init-eval/{instance_id}"
-    gpt_test_patch_path = f"{init_test_dir}/gpt_test_patch.diff"
+    init_test_dir = f"{GENERATE_DATA_PATH}/init-eval/{instance_id}"
+    init_test_patch_path = f"{init_test_dir}/test_patch.diff"
     # original_patch_path = f"{init_test_dir}/original_patch.diff"
     
     # 创建目录
     os.makedirs(init_test_dir, exist_ok=True)
     
     # 写入patch文件
-    with open(gpt_test_patch_path, 'w') as f:
-        f.write(gpt_test_patch)
+    with open(init_test_patch_path, 'w') as f:
+        f.write(test_patch)
         
     # with open(original_patch_path, 'w') as f:
     #     f.write(original_patch)
     
     # 获取需要复制的文件
     original_patch_files = get_all_filenames(original_patch)
-    gpt_test_files = get_all_filenames(gpt_test_patch)
+    test_files = get_all_filenames(test_patch)
     
     # 合并所有需要的文件
     files_to_copy = list(set(
         original_patch_files["modified"] + 
         original_patch_files["added"] +
-        gpt_test_files["added"]  # 测试文件通常是新增的
+        test_files["added"]  # 测试文件通常是新增的
     ))
     
     source_testbed = os.path.join(DEFAULT_PATH, repo_commit)
     conda_path = os.path.join(ENV_DIR, repo_commit)
 
-    eval_sh = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/eval.sh"
+    eval_sh = "./eval.sh"
     
     # 检查脚本是否存在
     if not os.path.exists(eval_sh):
@@ -277,7 +268,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
             instance_log = os.path.join(log_path, f"{instance_id}.log")
 
             # 运行测试
-            cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {gpt_test_patch_path}'
+            cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {init_test_patch_path}'
 
             cmd += f' > {instance_log} 2>&1'
             
@@ -402,11 +393,10 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     repo_commit = repo.replace("/", "__") + "__" + base_commit[:6]
     
     # 获取GPT生成的patches
-    original_patch = instance.get('patch', '')  # 原始修复patch
     gpt_patch = instance.get('gpt_patch', '')  # GPT生成的bug patch
-    gpt_test_patch = instance.get('gpt_test_patch', '')  # GPT生成的测试patch
+
     
-    if not gpt_patch or not gpt_test_patch:
+    if not gpt_patch:
         return {
             instance_id: {
                 "success": False,
@@ -416,8 +406,8 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
         }
     
     # 创建临时patch文件路径
-    gpt_bug_patch_path = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-bug-eval/{instance_id}/gpt_bug_patch.diff"
-    gpt_test_patch_path = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-bug-eval/{instance_id}/gpt_test_patch.diff"
+    gpt_bug_patch_path = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}/gpt_bug_patch.diff"
+    init_test_patch_path = f"{GENERATE_DATA_PATH}/gpt-init-eval/{instance_id}/test_patch.diff"
     # original_patch_path = f"/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/gpt-bug-eval/{instance_id}/original_patch.diff"
     
     # 创建目录
@@ -426,9 +416,6 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     # 写入patch文件
     with open(gpt_bug_patch_path, 'w') as f:
         f.write(gpt_patch)
-    
-    with open(gpt_test_patch_path, 'w') as f:
-        f.write(gpt_test_patch)
         
     # with open(original_patch_path, 'w') as f:
     #     f.write(original_patch)
@@ -436,22 +423,20 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     # 获取需要复制的文件
     # original_patch_files = get_all_filenames(original_patch)
     gpt_patch_files = get_all_filenames(gpt_patch)
-    gpt_test_files = get_all_filenames(gpt_test_patch)
     
     # 合并所有需要的文件
     files_to_copy = list(set(
         # original_patch_files["modified"] + 
         # original_patch_files["added"] +
         gpt_patch_files["modified"] + 
-        gpt_patch_files["added"] +
-        gpt_test_files["added"]  # 测试文件通常是新增的
+        gpt_patch_files["added"]
     ))
     
     source_testbed = os.path.join(DEFAULT_PATH, repo_commit)
     conda_path = os.path.join(ENV_DIR, repo_commit)
     
     # 使用现有的eval.sh脚本
-    eval_sh = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/eval_task_commit/eval.sh"
+    eval_sh = "./eval.sh"
     
     # 检查脚本是否存在
     if not os.path.exists(eval_sh):
@@ -498,23 +483,9 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
                         "duration": 0
                     }
                 }
-            
-            # 步骤3: 应用GPT test patch
-            # patch_cmd_3 = f'cd {temp_dir} && git apply --whitespace=nowarn {gpt_test_patch_path}'
-            # result_3 = subprocess.run(patch_cmd_3, shell=True, capture_output=True, text=True)
-            # if result_3.returncode != 0:
-            #     return {
-            #         instance_id: {
-            #             "success": False,
-            #             "error": f"Failed to apply GPT test patch: {result_3.stderr}",
-            #             "timed_out": False,
-            #             "duration": 0
-            #         }
-            #     }
-            
-            # 步骤4: 运行测试 - 直接运行pytest，不需要额外的patch文件
+
             # 步骤3: 运行测试
-            cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {gpt_test_patch_path}'
+            cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {init_test_patch_path}'
 
             cmd += f' > {instance_log} 2>&1'
 
@@ -930,7 +901,7 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # 从extract_bug_gpt.py的输出文件中读取数据
-    data_path = f'{GENERATE_DATA_PATH}/6_bug_gpt4o.jsonl'
+    data_path = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl'
     tasks = []
     
     try:
@@ -938,7 +909,7 @@ if __name__ == "__main__":
             for line in f_in:
                 task_data = json.loads(line)
                 # 只处理有GPT patch的数据
-                if 'gpt_patch' in task_data and 'gpt_test_patch' in task_data:
+                if 'gpt_patch' in task_data:
                     tasks.append(task_data)
                 else:
                     logger.warning(f"Skipping task {task_data.get('instance_id', 'unknown')}: missing GPT patches")

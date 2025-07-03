@@ -283,9 +283,9 @@ def process_jsonl(input_path, output_path):
 if __name__ == "__main__":
     # --- Define Input and Output Paths ---
     # MODIFIED: Define a LIST of input files
-    input_jsonl_files = f'{OUTPUT_DATA_PATH}/gpt-4o-2024-11-20_yimi_prompt_generate_bug_v1.jsonl.tmp'
+    input_jsonl_files = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_prompt_generate_bug_v1.jsonl.tmp'
     # Output path remains a single file
-    output_jsonl_file = f'{GENERATE_DATA_PATH}/6_bug_gpt4o.jsonl' # Changed name slightly for clarity
+    output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl' # Changed name slightly for clarity
 
     process_jsonl(input_jsonl_files, output_jsonl_file)
     

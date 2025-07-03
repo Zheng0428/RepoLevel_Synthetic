@@ -1,10 +1,17 @@
 import os  
 import json  
 import glob  
+import argparse
 from collections import defaultdict  
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Gather and analyze JSONL result files')
+parser.add_argument('--result-dir', type=str, required=True, 
+                    help='Directory pattern containing JSONL files (e.g., "/path/to/result_*.jsonl")')
+args = parser.parse_args()
+
 # Directory containing JSONL files  
-result_dir = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/5_pass64_gpt4o/Qwen2.5-Coder-32B-Instruct/result_*.jsonl"  
+result_dir = args.result_dir
 
 
 

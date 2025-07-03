@@ -3,7 +3,7 @@ import os
 import subprocess
 import shutil
 from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH
-from envs import OUTPUT_DATA_PATH
+from envs import GENERATE_DATA_PATH
 from temp_testbed import get_all_filenames
 import tempfile
 
@@ -97,6 +97,6 @@ def process_jsonl(input_path):
 
 if __name__ == "__main__":
     # 定义输入文件路径
-    input_jsonl_file = f'{OUTPUT_DATA_PATH}/gpt-4o-2024-11-20_yimi_prompt_generate_bug_v1.jsonl.tmp'
+    input_jsonl_file = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
     process_jsonl(input_jsonl_file)
     

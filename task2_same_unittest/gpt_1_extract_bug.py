@@ -15,10 +15,10 @@ import tempfile
 # Keep it if it's used elsewhere or remove if completely unused.
 
 # Add environment path
-sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData/infer/models')
-sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
+# sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
+sys.path.insert(0, '/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
 
-import tiktok_api
+import infer.models.tiktok_api as tiktok_api
 
 
 def clean_text(text):
@@ -296,5 +296,5 @@ if __name__ == "__main__":
     # Output path remains a single file
     output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl' # Changed name slightly for clarity
 
-    process_jsonl(input_jsonl_files, output_jsonl_file)
+    # process_jsonl(input_jsonl_files, output_jsonl_file)
     

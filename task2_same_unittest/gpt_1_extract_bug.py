@@ -12,6 +12,11 @@ from temp_testbed import TempTestbed, get_all_filenames
 import tempfile
 # The clean_text function is defined but not used in the main logic provided.
 # Keep it if it's used elsewhere or remove if completely unused.
+
+
+import tiktok_api
+
+
 def clean_text(text):
     # Remove special characters from the beginning and end, including spaces, newline characters, asterisks, quotes, and colons.
     return re.sub(r'^[\s\*\n\'\"""''：:]+|[\s\*\n\'\"""''：:]+$', '', text)

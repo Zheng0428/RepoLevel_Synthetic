@@ -15,6 +15,7 @@ import tempfile
 # Keep it if it's used elsewhere or remove if completely unused.
 
 # Add environment path
+sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData/infer/models')
 sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
 
 import tiktok_api

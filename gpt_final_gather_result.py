@@ -7,11 +7,11 @@ from collections import defaultdict
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Gather and analyze JSONL result files')
 parser.add_argument('--result-dir', type=str, required=True, 
-                    help='Directory pattern containing JSONL files (e.g., "/path/to/result_*.jsonl")')
+                    help='Directory pattern containing JSONL files (e.g., "/path/to/result")')
 args = parser.parse_args()
 
 # Directory containing JSONL files  
-result_dir = args.result_dir
+result_dir = args.result_dir + '/result_*.jsonl'
 
 
 
@@ -39,7 +39,7 @@ for file_idx, jsonl_file in enumerate(all_jsonl_files):
     file_name = os.path.basename(jsonl_file)  
     # print(f"Reading file {file_idx+1}/{total_files}: {file_name}")  
     
-    with open(jsonl_file, 'r') as f:  
+    with open(jsonl_file, 'r') as f:
         for line in f:  
             try:  
                 data = json.loads(line)  

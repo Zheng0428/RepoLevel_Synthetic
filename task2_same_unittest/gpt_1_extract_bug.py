@@ -3,6 +3,7 @@ import re
 import os # Import os for file existence checks
 import json5, simplejson
 import subprocess
+import sys
 from utils import fake_git_repo
 from envs import DEFAULT_PATH
 from envs import GENERATE_DATA_PATH, OUTPUT_DATA_PATH
@@ -13,6 +14,8 @@ import tempfile
 # The clean_text function is defined but not used in the main logic provided.
 # Keep it if it's used elsewhere or remove if completely unused.
 
+# Add environment path
+sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
 
 import tiktok_api
 

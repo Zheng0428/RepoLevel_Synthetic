@@ -4,7 +4,7 @@ import os # Import os for file existence checks
 import json5, simplejson
 import subprocess
 import sys
-from utils import fake_git_repo
+from utils import fake_git_repo, get_llm_response
 from envs import DEFAULT_PATH
 from envs import GENERATE_DATA_PATH, OUTPUT_DATA_PATH
 from typing import Dict, List, Optional
@@ -18,8 +18,6 @@ import tempfile
 # sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
 sys.path.append('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData')
 
-import infer.models.tiktok_api as tiktok_api
-import jsonpickle
 
 
 def clean_text(text):
@@ -279,7 +277,6 @@ def process_jsonl(input_path, output_path):
         # Write each repository's complete aggregated data as one JSON line
         for repo_data in aggregated_data:
             # Remove the original prompt and response to save space
-            repo_data.pop('prompt', None)
             repo_data.pop('api_resposne', None)
             repo_data.pop('meta_response', None)
             outfile.write(json.dumps(repo_data, ensure_ascii=False) + '\n')
@@ -290,43 +287,18 @@ def process_jsonl(input_path, output_path):
     print(f"Total Repos: {len(aggregated_data)}")
 
 # --- Main execution block ---
-# if __name__ == "__main__":
-#     # --- Define Input and Output Paths ---
-#     # MODIFIED: Define a LIST of input files
-#     input_jsonl_files = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
-#     # Output path remains a single file
-#     output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl' # Changed name slightly for clarity
-
-#     # process_jsonl(input_jsonl_files, output_jsonl_file)
-
-
 if __name__ == "__main__":
-    prompts = ["中国的首都是哪里？"]
-    model_args = {
-        'model_path_or_name': 'gpt-4o-2024-11-20',
-        'base_url': 'http://maas.byteintl.net/gateway/v1/chat/completions',  # Replace with actual base URL
-        'api_key': 'sk-1234',  # Replace with actual API key
-        'model': 'gpt-4o-2024-11-20',
-        'call_type': 'api_chat'
-    }
+    # --- Define Input and Output Paths ---
+    # MODIFIED: Define a LIST of input files
+    input_jsonl_files = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
+    # Output path remains a single file
+    output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl' # Changed name slightly for clarity
 
-    # from config.config_wrapper import initialize_config, get_config_wrapper
-    # initialize_config('config/config_gpt.yaml')
-    # config_wrapper = get_config_wrapper()
-    from config.config_wrapper import initialize_config, get_config_wrapper
-    initialize_config('/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData/config/config_gpt.yaml')
-    config_wrapper = get_config_wrapper()
-    
-    model_components = tiktok_api.load_model(
-        model_args['model_path_or_name'],
-        base_url=model_args['base_url'],
-        api_key=model_args['api_key'],
-        model=model_args['model'],
-        call_type=model_args['call_type']
-    )
-    responses, meta_responses = tiktok_api.infer(prompts, [{}], **model_components)
-    for response, meta_response in zip(responses, meta_responses):
-        print(response)
-        print(meta_response)
-        print(jsonpickle.decode(meta_response))
+    process_jsonl(input_jsonl_files, output_jsonl_file)
+
+
+# if __name__ == "__main__":
+#     prompts = "中国的首都是哪里？"
+#     response =  get_llm_response(prompts)
+#     print (response)
     

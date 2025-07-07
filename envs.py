@@ -48,5 +48,5 @@ TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 BASE_URL = "http://maas.byteintl.net/gateway/v1/chat/completions"
 API_KEY = "sk-1234"  # Replace with your actual API key
 MODEL = "gpt-4o-2024-11-20" # The specific model to use
-MAX_TOKENS = 4000
+MAX_TOKENS = 16000
 SYSTEM_PROMPT = "You are a very helpful assistant."

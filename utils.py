@@ -1158,12 +1158,7 @@ def get_llm_response(prompt: str) -> str:
 
         response_data = response.json()
 
-        # Extract the main text content from the response.
-        # Based on the original script's logic `response.get('content', '')`,
-        # we assume the response JSON has a top-level 'content' field.
-        # If the API returns a standard OpenAI-like structure, you might need to change this to:
-        # response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
-        response_text = response_data.get('content', 'Error: Could not find "content" in the response.')
+        response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
 
         return response_text
 

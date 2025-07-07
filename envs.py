@@ -42,3 +42,11 @@ LOG_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data'
 OUTPUT_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_BugFix_yimi/model_output_v1'
 TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 
+
+
+# Define the API endpoint and API key
+BASE_URL = "http://maas.byteintl.net/gateway/v1/chat/completions"
+API_KEY = "sk-1234"  # Replace with your actual API key
+MODEL = "gpt-4o-2024-11-20" # The specific model to use
+MAX_TOKENS = 4000
+SYSTEM_PROMPT = "You are a very helpful assistant."

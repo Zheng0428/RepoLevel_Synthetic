@@ -1109,3 +1109,69 @@ def _generate_combined_test_script(good_tests: dict) -> str:
             combined_script_content = f"# Warning: Some test parts were skipped during parsing (see logs).\n{combined_script_content}"
             
     return combined_script_content
+
+
+from envs import API_KEY, BASE_URL, MODEL, MAX_TOKENS, SYSTEM_PROMPT
+import requests
+
+def get_llm_response(prompt: str) -> str:
+    """
+    Sends a prompt to a large language model and returns the text response.
+
+    Args:
+        prompt: The user's question or instruction.
+
+    Returns:
+        The text response from the model as a string, or an error message if the request fails.
+    """
+    headers = {
+        'Content-Type': 'application/json',
+        'X-Api-Key': API_KEY
+    }
+
+    # The payload follows the structure required by the API endpoint.
+    # The 'messages' list contains the user's prompt.
+    payload = {
+        "model": MODEL,
+        "max_tokens": MAX_TOKENS,
+        "system": SYSTEM_PROMPT,
+        "messages": [
+            {'role': 'user', 'content': prompt}
+        ]
+    }
+    
+    # NOTE: The original script included specific 'tools' and 'tool_choices' parameters.
+    # These have been removed for this general-purpose function but can be added back
+    # into the payload if your specific use case requires them.
+
+    try:
+        # Make the API call
+        response = requests.post(
+            BASE_URL,
+            headers=headers,
+            json=payload,
+            timeout=600  # 10-minute timeout
+        )
+
+        # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
+
+        response_data = response.json()
+
+        # Extract the main text content from the response.
+        # Based on the original script's logic `response.get('content', '')`,
+        # we assume the response JSON has a top-level 'content' field.
+        # If the API returns a standard OpenAI-like structure, you might need to change this to:
+        # response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+        response_text = response_data.get('content', 'Error: Could not find "content" in the response.')
+
+        return response_text
+
+    except requests.exceptions.RequestException as e:
+        # Handle network-related errors
+        return f"API request failed: {e}"
+    except Exception as e:
+        # Handle other errors, such as JSON parsing issues
+        return f"An unexpected error occurred: {e}"
+
+

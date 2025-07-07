@@ -19,6 +19,7 @@ from pathlib import Path
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import _filter_test_content, _generate_combined_test_script
+from tqdm import tqdm
 
 # The clean_text function is defined but not used in the main logic provided.
 
@@ -998,12 +999,43 @@ if __name__ == "__main__":
         # If this is a retry (attempt > 1), regenerate the LLM response.
         if attempt > 1:
             logger.info("Regenerating LLM responses for failed tasks...")
-            for task in tasks_to_process:
+            
+            # Create a function to process a single task for concurrent execution
+            def process_single_task(task):
                 new_response_content = get_llm_response(task['prompt'])
                 # Structure the new response to match the initial format
                 task['meta_response'] = json.dumps({
                     'choices': [{'message': {'content': new_response_content}}]
                 })
+                return task
+            
+            # Use ThreadPoolExecutor for concurrent requests with progress bar
+            max_workers = min(10, len(tasks_to_process))  # Limit concurrent requests to avoid overwhelming the API
+            
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                future_to_task = {
+                    executor.submit(process_single_task, task): task
+                    for task in tasks_to_process
+                }
+                
+                # Process completed tasks with progress bar
+                completed_tasks = []
+                with tqdm(total=len(tasks_to_process), desc="Regenerating LLM responses", unit="task") as pbar:
+                    for future in as_completed(future_to_task):
+                        try:
+                            completed_task = future.result()
+                            completed_tasks.append(completed_task)
+                        except Exception as e:
+                            original_task = future_to_task[future]
+                            logger.error(f"Failed to process task {original_task.get('instance_id', 'unknown')}: {e}")
+                            # Keep the original task if processing failed
+                            completed_tasks.append(original_task)
+                        finally:
+                            pbar.update(1)
+                
+                # Update tasks_to_process with the completed tasks
+                tasks_to_process = completed_tasks
         
         # Phase 1: Extract Patches from LLM responses
         extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)

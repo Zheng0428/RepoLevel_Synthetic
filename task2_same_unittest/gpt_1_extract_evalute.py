@@ -1112,9 +1112,12 @@ if __name__ == "__main__":
         logger.info(f"--- Starting Attempt {attempt}/{max_attempts} ---")
         logger.info(f"Processing {len(tasks_to_process)} tasks.")
 
-        # If this is a retry (attempt > 1), regenerate the LLM response.
-        if attempt > 1:
-            logger.info("Regenerating LLM responses for failed tasks...")
+        # If this is a retry (attempt > 1) OR restart mode, regenerate the LLM response.
+        if attempt > 1 or args.restart:
+            if args.restart and attempt == 1:
+                logger.info("Restart mode: Regenerating LLM responses for remaining tasks...")
+            else:
+                logger.info("Regenerating LLM responses for failed tasks...")
             
             # Create a function to process a single task for concurrent execution
             def process_single_task(task):
@@ -1137,7 +1140,8 @@ if __name__ == "__main__":
                 
                 # Process completed tasks with progress bar
                 completed_tasks = []
-                with tqdm(total=len(tasks_to_process), desc="Regenerating LLM responses", unit="task") as pbar:
+                desc = "Regenerating LLM responses (restart)" if args.restart and attempt == 1 else "Regenerating LLM responses (retry)"
+                with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
                     for future in as_completed(future_to_task):
                         try:
                             completed_task = future.result()

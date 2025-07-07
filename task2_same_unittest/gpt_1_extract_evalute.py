@@ -488,7 +488,8 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
                     instance_id: {
                         "success": False,
                         "error": str(e),
-                        "timed_out": False
+                        "timed_out": False,
+                        "duration": 0
                     }
                 }
                     
@@ -597,7 +598,8 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
             instance_id: {
                 "success": False,
                 "error": "Missing gpt_patch",
-                "timed_out": False
+                "timed_out": False,
+                "duration": 0
             }
         }
     
@@ -677,7 +679,8 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
                     instance_id: {
                         "success": False,
                         "error": str(e),
-                        "timed_out": False
+                        "timed_out": False,
+                        "duration": 0
                     }
                 }
                     
@@ -990,10 +993,10 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
 
     # Production mode: run the evaluations
     logger.info("Starting init state evaluation...")
-    init_results = test_init(tasks_to_evaluate, 32, 45)
+    init_results = test_init(tasks_to_evaluate, 50, 45)
     
     logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(tasks_to_evaluate, 32, 45)
+    gpt_bug_results = test_gpt_bug(tasks_to_evaluate, 50, 45)
     
     logger.info("Analyzing combined results...")
     analysis_results = analyze_combined_results(init_results, gpt_bug_results)
@@ -1028,6 +1031,7 @@ if __name__ == "__main__":
         logger.info("Restart mode enabled. Checking for existing checkpoint...")
         
         # Try to load checkpoint
+        
         checkpoint_data = load_checkpoint_state(checkpoint_file)
         
         if checkpoint_data and os.path.exists(all_tasks_state_file):

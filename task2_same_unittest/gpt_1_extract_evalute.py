@@ -34,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants from gpt_2_eval_check_gpt_bug.py
-date = time.strftime("%Y-%m-%d-%H")
+date = time.strftime("%Y-%m-%d")
 EXP_PATH=f"{LOG_PATH}/test_log/py-gpt-bug-patch-commit_{date}_combined"
 EXPR_PATH = os.getenv("EXPR_PATH", "/opt/tiger/expr")
 ENV_DIR=f"{EXPR_PATH}/conda_env/"
@@ -978,7 +978,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # --- Main Loop Variables ---
-    tasks_to_process = initial_tasks[:100]
+    tasks_to_process = initial_tasks
     # Store all 'perfect' results from all iterations, keyed by instance_id
     all_perfect_results = {}
     # Store the full task data for items that achieve 'perfect' status

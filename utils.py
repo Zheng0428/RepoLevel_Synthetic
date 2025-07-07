@@ -1135,6 +1135,7 @@ def get_llm_response(prompt: str) -> str:
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
         "system": SYSTEM_PROMPT,
+        "temperature": 0.7,
         "messages": [
             {'role': 'user', 'content': prompt}
         ]

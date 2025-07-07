@@ -869,6 +869,61 @@ def analyze_combined_results(init_results, gpt_bug_results):
     }
 
 
+def save_checkpoint_state(checkpoint_data: dict, checkpoint_file: str):
+    """保存检查点状态到文件"""
+    try:
+        os.makedirs(os.path.dirname(checkpoint_file), exist_ok=True)
+        with open(checkpoint_file, 'w', encoding='utf-8') as f:
+            json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
+        logger.info(f"Checkpoint saved to {checkpoint_file}")
+    except Exception as e:
+        logger.error(f"Failed to save checkpoint: {e}")
+
+def load_checkpoint_state(checkpoint_file: str) -> Optional[dict]:
+    """从文件加载检查点状态"""
+    try:
+        if os.path.exists(checkpoint_file):
+            with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                checkpoint_data = json.load(f)
+            logger.info(f"Checkpoint loaded from {checkpoint_file}")
+            return checkpoint_data
+        else:
+            logger.info(f"No checkpoint file found at {checkpoint_file}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to load checkpoint: {e}")
+        return None
+
+def save_all_tasks_with_state(all_tasks_data: list, state_file: str):
+    """保存所有任务数据（包括已成功和待处理的）"""
+    try:
+        os.makedirs(os.path.dirname(state_file), exist_ok=True)
+        with open(state_file, 'w', encoding='utf-8') as f:
+            for task in all_tasks_data:
+                f.write(json.dumps(task, ensure_ascii=False) + '\n')
+        logger.info(f"All tasks state saved to {state_file}")
+    except Exception as e:
+        logger.error(f"Failed to save all tasks state: {e}")
+
+def load_all_tasks_with_state(state_file: str) -> List[dict]:
+    """加载所有任务数据"""
+    try:
+        if os.path.exists(state_file):
+            tasks = []
+            with open(state_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        tasks.append(json.loads(line))
+            logger.info(f"Loaded {len(tasks)} tasks from state file {state_file}")
+            return tasks
+        else:
+            logger.info(f"No state file found at {state_file}")
+            return []
+    except Exception as e:
+        logger.error(f"Failed to load tasks state: {e}")
+        return []
+
+
 def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     """
     Takes a list of tasks, parses the LLM response, and generates patches.
@@ -956,36 +1011,83 @@ if __name__ == "__main__":
                         help='Maximum number of retries for failed items (default: 5). Set to 1 to disable retries.')
     parser.add_argument('--enable_retry', action='store_true', 
                         help='Enable the retry mechanism for failed items. If not set, runs only once.')
+    parser.add_argument('--restart', action='store_true',
+                        help='Restart from saved checkpoint if available')
 
     args = parser.parse_args()
     
     start_time = time.time()
 
-    # --- Load Initial Data ---
-    initial_tasks = []
-    # This is the starting point for all processing.
-    input_jsonl_file = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
-    if not os.path.exists(input_jsonl_file):
-        print(f"Warning: Input file not found: {input_jsonl_file}. Skipping.")
-        input_jsonl_file = input_jsonl_file.replace(".tmp", "") # Remove the.tmp extension if it exists
-    try:
-        with open(input_jsonl_file, 'r', encoding='utf-8') as infile:
-            for line in infile:
-                initial_tasks.append(json.loads(line))
-        logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")
-    except FileNotFoundError:
-        logger.error(f"FATAL: Initial data file not found at {input_jsonl_file}. Exiting.")
-        sys.exit(1)
+    # --- Define checkpoint and state files ---
+    checkpoint_file = f"{GENERATE_DATA_PATH}/checkpoint_state.json"
+    all_tasks_state_file = f"{GENERATE_DATA_PATH}/all_tasks_state.jsonl"
+    final_output_file = f"{GENERATE_DATA_PATH}/gpt_2_finish_bug_gpt4o.jsonl"
 
-    # --- Main Loop Variables ---
-    tasks_to_process = initial_tasks
-    # Store all 'perfect' results from all iterations, keyed by instance_id
-    all_perfect_results = {}
-    # Store the full task data for items that achieve 'perfect' status
-    all_perfect_tasks = [] 
-    # Keep track of instance_ids that have succeeded to avoid reprocessing
-    processed_ids = set() 
+    # --- Load or Initialize Data ---
+    if args.restart:
+        logger.info("Restart mode enabled. Checking for existing checkpoint...")
+        
+        # Try to load checkpoint
+        checkpoint_data = load_checkpoint_state(checkpoint_file)
+        
+        if checkpoint_data and os.path.exists(all_tasks_state_file):
+            logger.info("Found existing checkpoint and state files. Resuming from previous state.")
+            
+            # Load state from checkpoint (不包括尝试次数)
+            all_perfect_results = checkpoint_data.get('all_perfect_results', {})
+            processed_ids = set(checkpoint_data.get('processed_ids', []))
+            initial_tasks = load_all_tasks_with_state(all_tasks_state_file)
+            
+            # Load perfect tasks from existing output file if it exists
+            all_perfect_tasks = []
+            if os.path.exists(final_output_file):
+                try:
+                    with open(final_output_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if line.strip():
+                                all_perfect_tasks.append(json.loads(line))
+                    logger.info(f"Loaded {len(all_perfect_tasks)} existing perfect tasks from output file")
+                except Exception as e:
+                    logger.warning(f"Could not load existing perfect tasks: {e}")
+                    all_perfect_tasks = []
+            
+            # Rebuild tasks_to_process: exclude already processed items
+            tasks_to_process = [
+                task for task in initial_tasks 
+                if task['instance_id'] not in processed_ids
+            ]
+            
+            logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
+            logger.info(f"Already processed: {len(processed_ids)} tasks")
+            logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")
+            
+        else:
+            logger.info("No valid checkpoint found. Starting from beginning.")
+            args.restart = False  # Fall through to normal initialization
 
+    if not args.restart:
+        # Normal initialization - load initial data
+        initial_tasks = []
+        input_jsonl_file = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
+        if not os.path.exists(input_jsonl_file):
+            print(f"Warning: Input file not found: {input_jsonl_file}. Skipping.")
+            input_jsonl_file = input_jsonl_file.replace(".tmp", "")
+        try:
+            with open(input_jsonl_file, 'r', encoding='utf-8') as infile:
+                for line in infile:
+                    initial_tasks.append(json.loads(line))
+            logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")
+        except FileNotFoundError:
+            logger.error(f"FATAL: Initial data file not found at {input_jsonl_file}. Exiting.")
+            sys.exit(1)
+
+        # Initialize state variables
+        tasks_to_process = initial_tasks
+        all_perfect_results = {}
+        all_perfect_tasks = []
+        processed_ids = set()
+
+    # 每次都重新开始计算尝试次数
     max_attempts = args.max_retries if args.enable_retry else 1
 
     for attempt in range(1, max_attempts + 1):
@@ -1010,7 +1112,7 @@ if __name__ == "__main__":
                 return task
             
             # Use ThreadPoolExecutor for concurrent requests with progress bar
-            max_workers = min(10, len(tasks_to_process))  # Limit concurrent requests to avoid overwhelming the API
+            max_workers = min(10, len(tasks_to_process))
             
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks
@@ -1048,6 +1150,15 @@ if __name__ == "__main__":
                 task for task in initial_tasks 
                 if task['instance_id'] in failed_to_parse_ids and task['instance_id'] not in processed_ids
             ]
+            
+            # Save checkpoint before continuing (不保存尝试次数)
+            checkpoint_data = {
+                'all_perfect_results': all_perfect_results,
+                'processed_ids': list(processed_ids),
+                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            save_checkpoint_state(checkpoint_data, checkpoint_file)
+            save_all_tasks_with_state(initial_tasks, all_tasks_state_file)
             continue
 
         # Phase 2: Evaluate successfully extracted patches
@@ -1066,6 +1177,25 @@ if __name__ == "__main__":
             if task['instance_id'] in perfect_ids_this_iter and task['instance_id'] not in processed_ids:
                 all_perfect_tasks.append(task)
                 processed_ids.add(task['instance_id'])
+
+        # --- Save progress after each iteration ---
+        if all_perfect_tasks:
+            # Save current perfect results to output file
+            save_final_results_to_jsonl(
+                all_perfect_results,
+                all_perfect_tasks,
+                final_output_file
+            )
+            logger.info(f"Progress saved: {len(all_perfect_tasks)} perfect tasks saved to {final_output_file}")
+
+        # Save checkpoint state (不保存尝试次数)
+        checkpoint_data = {
+            'all_perfect_results': all_perfect_results,
+            'processed_ids': list(processed_ids),
+            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        save_checkpoint_state(checkpoint_data, checkpoint_file)
+        save_all_tasks_with_state(initial_tasks, all_tasks_state_file)
 
         # --- Prepare for the Next Iteration ---
         # Identify all tasks that were evaluated in this iteration
@@ -1092,8 +1222,6 @@ if __name__ == "__main__":
 
     # --- Finalization after all attempts ---
     logger.info("="*20 + " All Attempts Finished " + "="*20)
-    
-    final_output_file = f"{GENERATE_DATA_PATH}/gpt_2_finish_bug_gpt4o.jsonl"
 
     if all_perfect_tasks:
         # Save the final, aggregated perfect results to the output file
@@ -1110,6 +1238,17 @@ if __name__ == "__main__":
         logger.warning("No 'perfect tests' were found in any attempt. The output file will be empty.")
         # Create an empty file to signify completion
         open(final_output_file, 'w').close()
+
+    # Clean up checkpoint files after successful completion
+    try:
+        if os.path.exists(checkpoint_file):
+            os.remove(checkpoint_file)
+            logger.info("Checkpoint file cleaned up after successful completion")
+        if os.path.exists(all_tasks_state_file):
+            os.remove(all_tasks_state_file)
+            logger.info("State file cleaned up after successful completion")
+    except Exception as e:
+        logger.warning(f"Could not clean up checkpoint files: {e}")
 
     total_time = time.time() - start_time
     logger.info(f"Total execution time: {total_time:.2f}s")

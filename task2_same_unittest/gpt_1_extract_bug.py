@@ -374,6 +374,8 @@ def process_jsonl(input_path, output_path):
                 if result is not None:
                     # 处理生成patch的逻辑
                     processed_data = generate_patches_for_bug_data(data, result)
+                    processed_data.pop('api_resposne', None)
+                    processed_data.pop('meta_response', None)
                     aggregated_data.append(processed_data)
                     print(f"Successfully processed and generated patches for {data.get('instance_id', 'unknown')}")
                 else:
@@ -391,16 +393,15 @@ def process_jsonl(input_path, output_path):
         # Write each repository's complete aggregated data as one JSON line
         for repo_data in aggregated_data:
             # Remove the original prompt and response to save space
-            repo_data.pop('api_resposne', None)
-            repo_data.pop('meta_response', None)
             outfile.write(json.dumps(repo_data, ensure_ascii=False) + '\n')
     print(f"\n处理完成，聚合后的数据已保存到 {output_path}")
 
     # --- Save the final aggregated data to the output file ---
     print(f"\n--- Aggregation Summary ---")
     print(f"Total Repos: {len(aggregated_data)}")
+    return aggregated_data
 
-# === Added evaluation functions from gpt_2_eval_check_gpt_bug.py ===
+# === test_init ===
 
 def test_init(tasks, max_workers, timeout):
     """测试初始状态（修复后）GPT生成的测试是否能通过"""
@@ -568,6 +569,8 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
         }
     
     return report
+
+# === test_generate ===
 
 def test_gpt_bug(tasks, max_workers, timeout):
     """测试GPT生成的bug"""
@@ -754,6 +757,9 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
         }
     
     return report
+
+# =====================
+
 
 def save_final_results_to_jsonl(perfect_tests_results: dict, original_data: dict, output_file: str):
     """
@@ -948,7 +954,7 @@ if __name__ == "__main__":
         input_jsonl_files = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
         output_jsonl_file = f'{GENERATE_DATA_PATH}/gpt_1_bug_gpt4o.jsonl'
 
-        process_jsonl(input_jsonl_files, output_jsonl_file)
+        aggregated_data = process_jsonl(input_jsonl_files, output_jsonl_file)
         logger.info(f"Bug extraction completed. Output saved to {output_jsonl_file}")
     
     # Phase 2: Evaluate bugs (functionality from gpt_2_eval_check_gpt_bug.py)
@@ -961,14 +967,23 @@ if __name__ == "__main__":
         tasks = []
         
         try:
-            with open(data_path, 'r') as f_in:
-                for line in f_in:
-                    task_data = json.loads(line)
-                    # 只处理有GPT patch的数据
+            if args.mode == 'evaluate':
+                with open(data_path, 'r') as f_in:
+                    for line in f_in:
+                        task_data = json.loads(line)
+                        # 只处理有GPT patch的数据
+                        if 'gpt_patch' in task_data:
+                            tasks.append(task_data)
+                        else:
+                            logger.warning(f"Skipping task {task_data.get('instance_id', 'unknown')}: missing GPT patches")
+            else:
+                # Normal mode: process tasks
+                for task_data in aggregated_data:
                     if 'gpt_patch' in task_data:
                         tasks.append(task_data)
                     else:
                         logger.warning(f"Skipping task {task_data.get('instance_id', 'unknown')}: missing GPT patches")
+          
         except FileNotFoundError:
             logger.error(f"Data file not found: {data_path}")
             if args.mode == 'evaluate':
@@ -1019,9 +1034,3 @@ if __name__ == "__main__":
     total_time = time.time() - start_time
     logger.info(f"Total execution time: {total_time:.2f}s")
 
-# Legacy test code (commented out)
-# if __name__ == "__main__":
-#     prompts = "中国的首都是哪里？"
-#     response =  get_llm_response(prompts)
-#     print (response)
-    

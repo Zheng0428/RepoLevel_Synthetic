@@ -600,7 +600,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
     """
     try:
         # Attempt to reconstruct the prompt
-        logger.info(f"Attempting prompt reconstruction for task {task.get('instance_id', 'unknown')}")
+        # logger.info(f"Attempting prompt reconstruction for task {task.get('instance_id', 'unknown')}")
         
         # Use the new reconstruction function
         reconstructed_prompt = reconstruct_three_shot_prompt(
@@ -610,7 +610,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
         )
         
         if reconstructed_prompt and reconstructed_prompt.strip():
-            logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
+            # logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
             
             # Get a new response using the reconstructed prompt
             new_response = get_llm_response(reconstructed_prompt)
@@ -620,7 +620,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             task_copy['messages'] = [{"role": "user", "content": reconstructed_prompt}]
             task_copy['response'] = new_response
             
-            logger.info(f"Generated new response for task {task.get('instance_id', 'unknown')}")
+            # logger.info(f"Generated new response for task {task.get('instance_id', 'unknown')}")
             return task_copy
         else:
             logger.warning(f"Prompt reconstruction returned empty for task {task.get('instance_id', 'unknown')}, using original")
@@ -684,7 +684,7 @@ if __name__ == "__main__":
             task for task in initial_tasks 
             if task['instance_id'] not in processed_ids
         ]
-        
+        tasks_to_process = tasks_to_process[:500]
         logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
         logger.info(f"Already processed: {len(processed_ids)} tasks")
         logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")
@@ -698,7 +698,6 @@ if __name__ == "__main__":
 
     # 每次都重新开始计算尝试次数
     max_attempts = args.max_retries if args.enable_retry else 1
-
     for attempt in range(1, max_attempts + 1):
         if not tasks_to_process:
             logger.info("No more tasks to process. Exiting retry loop.")
@@ -715,7 +714,7 @@ if __name__ == "__main__":
                 logger.info("Regenerating LLM responses for failed tasks...")
             
             # Use ThreadPoolExecutor for concurrent requests with progress bar
-            max_workers = min(1, len(tasks_to_process))
+            max_workers = min(20, len(tasks_to_process))
             
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks with reconstruction

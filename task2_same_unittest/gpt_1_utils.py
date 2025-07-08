@@ -557,7 +557,7 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
         str: The reconstructed prompt, or empty string if reconstruction fails
     """
     try:
-        logger.info(f"Starting prompt reconstruction for task {task_item.get('instance_id', 'unknown')}")
+        # logger.info(f"Starting prompt reconstruction for task {task_item.get('instance_id', 'unknown')}")
         
         # Load the template for three-shot mode
         template = read_yaml("yimi/three_shot_same_test")
@@ -712,7 +712,7 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
             logger.warning(f"Error counting tokens: {e}")
             return ""
         
-        logger.info(f"Successfully reconstructed prompt for task {task_item.get('instance_id', 'unknown')}")
+        # logger.info(f"Successfully reconstructed prompt for task {task_item.get('instance_id', 'unknown')}")
         return prompt
         
     except Exception as e:

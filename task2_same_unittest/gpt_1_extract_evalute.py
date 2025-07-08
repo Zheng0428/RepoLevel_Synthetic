@@ -1032,6 +1032,43 @@ def load_perfect_tasks_from_output(final_output_file: str) -> List[dict]:
             logger.warning(f"Could not load perfect tasks from output file: {e}")
     return perfect_tasks
 
+def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, output_file: str):
+    """
+    追加保存结果到jsonl文件（用于增量保存）
+    
+    Args:
+        perfect_tests_results: perfect_tests结果（包含完整评估数据）
+        original_data: 原始数据列表
+        output_file: 输出文件路径
+    """
+    # 创建输出数据
+    output_data = []
+    for data in original_data:
+        instance_id = data['instance_id']
+        if instance_id in perfect_tests_results:
+            result_data = perfect_tests_results[instance_id]
+            new_data = data.copy()
+            
+            # 使用完整的评估结果数据
+            init_passed_tests = set(result_data['init_result'].get('tests_status', {}).get('PASSED', []))
+            bug_passed_tests = set(result_data['bug_result'].get('tests_status', {}).get('PASSED', []))
+            bug_failed_tests = set(result_data['bug_result'].get('tests_status', {}).get('FAILED', []))
+
+            new_data['FAIL_TO_PASS'] = list(init_passed_tests & bug_failed_tests)
+            new_data['PASS_TO_PASS'] = list(init_passed_tests & bug_passed_tests)
+            output_data.append(new_data)
+    
+    # 追加保存到jsonl文件
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    # 使用追加模式，无缝衔接已有数据
+    with open(output_file, 'a', encoding='utf-8') as f:
+        for data in output_data:
+            f.write(json.dumps(data, ensure_ascii=False) + '\n')
+    
+    logger.info(f"Appended {len(output_data)} results to {output_file}")
+    return output_data
+
 # --- Main execution block ---
 if __name__ == "__main__":
     import argparse
@@ -1077,12 +1114,8 @@ if __name__ == "__main__":
         processed_ids = load_processed_ids_from_output(final_output_file)
         all_perfect_tasks = load_perfect_tasks_from_output(final_output_file)
         
-        # Rebuild all_perfect_results for internal tracking (though not strictly necessary)
-        all_perfect_results = {}
-        for task in all_perfect_tasks:
-            # Since we don't store evaluation results in output file, 
-            # we'll rebuild this as we progress
-            all_perfect_results[task['instance_id']] = {'category': 'perfect'}
+        # 重启模式下，不需要重建all_perfect_results，因为我们使用增量保存
+        all_perfect_results = {}  # 只用于跟踪新的结果
         
         # Build tasks_to_process: exclude already processed items
         tasks_to_process = [
@@ -1188,14 +1221,21 @@ if __name__ == "__main__":
                 processed_ids.add(task['instance_id'])
 
         # --- Save progress after each iteration ---
-        if all_perfect_tasks:
-            # Save current perfect results to output file
-            save_final_results_to_jsonl(
-                all_perfect_results,
-                all_perfect_tasks,
-                final_output_file
-            )
-            logger.info(f"Progress saved: {len(all_perfect_tasks)} perfect tasks saved to {final_output_file}")
+        if perfect_results_this_iter:  # 只保存本次迭代新产生的完美结果
+            # 只为本次迭代的成功任务保存结果
+            current_iter_perfect_tasks = [
+                task for task in extracted_tasks 
+                if task['instance_id'] in perfect_ids_this_iter and task['instance_id'] not in processed_ids
+            ]
+            
+            if current_iter_perfect_tasks:
+                # 追加保存本次的结果到输出文件（无缝衔接已有数据）
+                append_results_to_jsonl(
+                    perfect_results_this_iter,
+                    current_iter_perfect_tasks,
+                    final_output_file
+                )
+                logger.info(f"Progress saved: {len(current_iter_perfect_tasks)} new perfect tasks appended to {final_output_file}")
 
         # --- Prepare for the Next Iteration ---
         # Identify all tasks that were evaluated in this iteration
@@ -1223,17 +1263,14 @@ if __name__ == "__main__":
     # --- Finalization after all attempts ---
     logger.info("="*20 + " All Attempts Finished " + "="*20)
 
-    if all_perfect_tasks:
-        # Save the final, aggregated perfect results to the output file
-        final_data = save_final_results_to_jsonl(
-            all_perfect_results,
-            all_perfect_tasks,
-            final_output_file
-        )
+    # 统计最终结果（从文件读取，包括之前和本次处理的所有数据）
+    final_all_perfect_tasks = load_perfect_tasks_from_output(final_output_file)
+    
+    if final_all_perfect_tasks:
         logger.info(f"Final analysis complete. Log files saved to {EXP_PATH}")
-        logger.info(f"Total unique perfect instances found across all attempts: {len(all_perfect_tasks)}")
+        logger.info(f"Total unique perfect instances found across all attempts: {len(final_all_perfect_tasks)}")
         logger.info(f"Final unittest data saved to: {final_output_file}")
-        logger.info(f"Final data count: {len(final_data)}")
+        logger.info(f"Final data count: {len(final_all_perfect_tasks)}")
     else:
         logger.warning("No 'perfect tests' were found in any attempt. The output file will be empty.")
         # Create an empty file to signify completion

@@ -542,6 +542,8 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
     logger.info(f"Appended {len(output_data)} results to {output_file}")
     return output_data
 
+def origin_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
+    return task_item['prompt']
 
 def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     """

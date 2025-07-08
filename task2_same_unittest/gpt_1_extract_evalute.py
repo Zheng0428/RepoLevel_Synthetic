@@ -27,6 +27,7 @@ from gpt_1_utils import (
     append_results_to_jsonl,
     # Prompt reconstruction
     reconstruct_three_shot_prompt,
+    origin_prompt,
     # Constants
     NON_TEST_EXTS
 )
@@ -614,7 +615,9 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             
             # Get a new response using the reconstructed prompt
             new_response = get_llm_response(reconstructed_prompt)
-            
+            if 'API request failed' in new_response:
+                logger.warning(f"API request failed for task {task.get('instance_id', 'unknown')}, using original")
+                return task
             # Update the task with the new prompt and response
             task_copy = task.copy()
             task_copy['messages'] = [{"role": "user", "content": reconstructed_prompt}]
@@ -684,7 +687,7 @@ if __name__ == "__main__":
             task for task in initial_tasks 
             if task['instance_id'] not in processed_ids
         ]
-        tasks_to_process = tasks_to_process[:500]
+        tasks_to_process = tasks_to_process[:100]
         logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
         logger.info(f"Already processed: {len(processed_ids)} tasks")
         logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")

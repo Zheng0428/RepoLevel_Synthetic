@@ -1113,62 +1113,81 @@ def _generate_combined_test_script(good_tests: dict) -> str:
 
 from envs import API_KEY, BASE_URL, MODEL, MAX_TOKENS, SYSTEM_PROMPT
 import requests
+import time
 
-def get_llm_response(prompt: str) -> str:
+def get_llm_response(prompt: str, temperature: float = 0.7) -> str:
     """
     Sends a prompt to a large language model and returns the text response.
 
     Args:
         prompt: The user's question or instruction.
+        max_tokens: Maximum tokens for the response (uses MAX_TOKENS from envs if not provided)
+        temperature: Temperature for response randomness
 
     Returns:
-        The text response from the model as a string, or an error message if the request fails.
-    """
+        The text response from the model as a string, or None if the request fails.
+    """ 
     headers = {
         'Content-Type': 'application/json',
         'X-Api-Key': API_KEY
     }
 
     # The payload follows the structure required by the API endpoint.
-    # The 'messages' list contains the user's prompt.
     payload = {
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
         "system": SYSTEM_PROMPT,
-        "temperature": 0.7,
+        "temperature": temperature,
         "messages": [
             {'role': 'user', 'content': prompt}
         ]
     }
     
-    # NOTE: The original script included specific 'tools' and 'tool_choices' parameters.
-    # These have been removed for this general-purpose function but can be added back
-    # into the payload if your specific use case requires them.
-
-    try:
-        # Make the API call
-        response = requests.post(
-            BASE_URL,
-            headers=headers,
-            json=payload,
-            timeout=600  # 10-minute timeout
-        )
-
-        # Raise an exception for bad status codes (4xx or 5xx)
-        response.raise_for_status()
-
-        response_data = response.json()
-
-        response_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
-
-        return response_text
-
-    except requests.exceptions.RequestException as e:
-        # Handle network-related errors
-        return f"API request failed: {e}"
-    except Exception as e:
-        # Handle other errors, such as JSON parsing issues
-        return f"An unexpected error occurred: {e}"
+    # 发送请求，加入重试逻辑
+    for retry in range(3):
+        try:
+            # Make the API call
+            response = requests.post(
+                BASE_URL,
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=600  # 10-minute timeout
+            )
+            
+            print(f"API Response Status: {response.status_code}")
+            if response.status_code == 200:
+                response_json = response.json()
+                print(response_json)
+                
+                if "choices" in response_json and len(response_json["choices"]) > 0:
+                    response_text = response_json["choices"][0]["message"]["content"]
+                    return response_text
+                else:
+                    print(f"Unexpected response format: {response_json}")
+            
+            error_msg = f"API request error: {response.status_code}, {response.text}"
+            print(f"{error_msg} - Retrying ({retry+1}/3)")
+            
+            # 检查特定错误码
+            try:
+                error_json = response.json()
+                if "error" in error_json and error_json["error"].get("code") == '-4003':
+                    print("Rate limit or quota exceeded, returning None")
+                    return None
+            except:
+                pass
+                
+            time.sleep(10.0)
+        
+        except requests.exceptions.RequestException as e:
+            print(f"API request exception: {str(e)} - Retrying ({retry+1}/3)")
+            time.sleep(30)
+        except Exception as e:
+            print(f"Unexpected error: {str(e)} - Retrying ({retry+1}/3)")
+            time.sleep(30)
+    
+    print("All retry attempts failed")
+    return None
 
 
 if __name__ == "__main__":

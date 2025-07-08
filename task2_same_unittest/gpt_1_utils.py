@@ -5,10 +5,29 @@ import logging
 import subprocess
 import signal
 import time
+import tempfile
+import random
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
-from temp_testbed import TempTestbed
+from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
+
+# Add additional imports for the new function
+try:
+    from utils.common import read_yaml, count_tokens
+except ImportError:
+    # Fallback for simpler count_tokens if needed
+    def count_tokens(text, model_name="gpt-4o"):
+        return len(text.split())
+    
+    def read_yaml(config='default'):
+        import yaml
+        if os.path.exists(f'config/prompt/{config}.yaml'):
+            yaml_file = f'config/prompt/{config}.yaml'
+        else:
+            yaml_file = config
+        with open(yaml_file, 'r') as f:
+            return yaml.safe_load(f)
 
 logger = logging.getLogger(__name__)
 
@@ -512,3 +531,253 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
     
     logger.info(f"Appended {len(output_data)} results to {output_file}")
     return output_data
+
+def reconstruct_three_shot_prompt(item: dict, default_path: str, all_samples: List[dict], template_path: str = "yimi/three_shot_same_test") -> Optional[str]:
+    """
+    根据data_loader.py中的逻辑重构three-shot prompt
+    
+    Args:
+        item: 当前需要处理的任务项
+        default_path: 仓库根目录路径 (通常是 "/opt/tiger/expr/repo_commit")
+        all_samples: 所有可用的样本列表，用于随机选择示例
+        template_path: YAML模板路径
+        
+    Returns:
+        重构的prompt字符串，如果失败返回None
+    """
+    try:
+        # 加载模板
+        template = read_yaml(template_path)
+        
+        # 获取基本信息
+        example_problem_statement_1 = item['problem_statement']          
+        repo_name = item.get('repo').replace('/', '__') + '__' + item.get('base_commit')[:6]
+        
+        # 获取原始patch来提取示例bug信息
+        origin_patch = item['patch']
+        
+        # 创建临时目录来应用patch并获取修改内容
+        source_testbed = os.path.join(default_path, repo_name)
+        if not os.path.exists(source_testbed):
+            logger.warning(f"Source testbed not found: {source_testbed}")
+            return None
+        
+        # 获取将被patch修改的文件
+        patch_files = get_all_filenames(origin_patch)
+        modified_files = patch_files["modified"] + patch_files["added"]
+        
+        if not modified_files:
+            logger.warning(f"No modified files found in patch for {item.get('instance_id', 'unknown')}")
+            return None
+        
+        # 使用TempTestbed为第一个示例创建临时环境
+        try:
+            with TempTestbed(source_testbed=source_testbed, copy_files=modified_files) as temp_testbed:
+                temp_dir = temp_testbed.temp_dir
+                
+                # 将patch写入临时文件
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as patch_file:
+                    patch_file.write(origin_patch)
+                    patch_file_path = patch_file.name
+                
+                try:
+                    # 应用patch获取修改后的（有bug的）内容
+                    patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {patch_file_path}'
+                    result = subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
+                    
+                    if result.returncode != 0:
+                        logger.warning(f"Failed to apply patch for example 1: {result.stderr}")
+                        return None
+                    
+                    # 读取所有修改的文件来获取示例buggy代码
+                    example_buggy_files_1 = ""
+                    for file_path in modified_files:
+                        example_file_full_path = os.path.join(temp_dir, file_path)
+                        
+                        if os.path.exists(example_file_full_path):
+                            with open(example_file_full_path, 'r') as f:
+                                file_content = f.read()
+                                example_buggy_files_1 += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+                        else:
+                            continue
+                    
+                    if not example_buggy_files_1:
+                        logger.warning(f"No buggy files content found for example 1")
+                        return None
+                        
+                finally:
+                    # 清理临时patch文件
+                    os.unlink(patch_file_path)
+                    
+        except Exception as e:
+            logger.error(f"Error processing first example: {e}")
+            return None
+        
+        # 随机采样其他示例，然后选择最短的两个
+        available_samples = [s for s in all_samples if s != item]  # 排除当前项
+        if len(available_samples) < 3:
+            logger.warning(f"Not enough samples for selection: {len(available_samples)}")
+            return None
+            
+        random_samples = random.sample(available_samples, min(5, len(available_samples)))
+        
+        # 处理其他示例并收集它们的buggy_files长度
+        candidate_examples = []
+        
+        for sample_item in random_samples:
+            sample_problem_statement = sample_item['problem_statement']
+            sample_repo_name = sample_item.get('repo').replace('/', '__') + '__' + sample_item.get('base_commit')[:6]
+            sample_origin_patch = sample_item['patch']
+            sample_source_testbed = os.path.join(default_path, sample_repo_name)
+            
+            if not os.path.exists(sample_source_testbed):
+                continue
+            
+            sample_patch_files = get_all_filenames(sample_origin_patch)
+            sample_modified_files = sample_patch_files["modified"] + sample_patch_files["added"]
+            
+            if not sample_modified_files:
+                continue
+            
+            try:
+                with TempTestbed(source_testbed=sample_source_testbed, copy_files=sample_modified_files) as sample_temp_testbed:
+                    sample_temp_dir = sample_temp_testbed.temp_dir
+                    
+                    # 将patch写入临时文件
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as sample_patch_file:
+                        sample_patch_file.write(sample_origin_patch)
+                        sample_patch_file_path = sample_patch_file.name
+                    
+                    try:
+                        # 应用patch获取修改后的（有bug的）内容
+                        sample_patch_cmd = f'cd {sample_temp_dir} && git apply --whitespace=nowarn {sample_patch_file_path}'
+                        sample_result = subprocess.run(sample_patch_cmd, shell=True, capture_output=True, text=True)
+                        
+                        if sample_result.returncode != 0:
+                            continue
+                        
+                        # 读取所有修改的文件获取示例buggy代码
+                        sample_example_buggy_files = ""
+                        for file_path in sample_modified_files:
+                            sample_example_file_full_path = os.path.join(sample_temp_dir, file_path)
+                            
+                            if os.path.exists(sample_example_file_full_path):
+                                with open(sample_example_file_full_path, 'r') as f:
+                                    file_content = f.read()
+                                    sample_example_buggy_files += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+                            else:
+                                continue
+                        
+                        if sample_example_buggy_files:
+                            candidate_examples.append({
+                                'problem_statement': sample_problem_statement,
+                                'buggy_files': sample_example_buggy_files,
+                                'buggy_files_length': len(sample_example_buggy_files)
+                            })
+                            
+                    finally:
+                        # 清理临时patch文件
+                        os.unlink(sample_patch_file_path)
+                        
+            except Exception as e:
+                logger.warning(f"Error processing sample: {e}")
+                continue
+        
+        # 如果没有足够的候选示例则跳过
+        if len(candidate_examples) < 2:
+            logger.warning(f"Not enough candidate examples: {len(candidate_examples)}")
+            return None
+        
+        # 按buggy_files长度排序并选择最短的两个
+        candidate_examples.sort(key=lambda x: x['buggy_files_length'])
+        selected_examples = candidate_examples[:2]
+        
+        # 获取修补后的文件
+        patch_files = get_all_filenames(item['patch'])
+        test_files = get_all_filenames(item['test_patch'])
+        files_to_copy = list(set(
+            patch_files["modified"] + 
+            patch_files["added"] +
+            test_files["modified"] + 
+            test_files["added"]
+        ))
+        
+        patch = item['patch']
+        test_patch = item['test_patch']
+        
+        with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
+            temp_dir = temp_testbed.temp_dir
+            
+            # 应用patch
+            patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn'
+            result = subprocess.run(patch_cmd, shell=True, input=patch, text=True, capture_output=True)
+            if result.returncode != 0:
+                logger.warning(f"Failed to apply main patch: {result.stderr}")
+                return None
+                
+            try:
+                test_patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn'
+                result = subprocess.run(test_patch_cmd, shell=True, input=test_patch, text=True, capture_output=True)
+                if result.returncode != 0:
+                    logger.warning(f"Failed to apply test patch: {result.stderr}")
+                    return None
+            except:
+                logger.warning("Failed to apply test patch")
+                return None
+
+            # 获取原始干净代码（应用patch前）
+            original_code = ''
+            files_to_modify = []
+            test_file = item['input_files'] + item['noise_files']
+            for test_file_name in test_file:
+                full_file_path = os.path.join(temp_dir, test_file_name)
+                if os.path.exists(full_file_path):
+                    with open(full_file_path, 'r') as f:
+                        file_content = f.read()
+                        original_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+                        files_to_modify.append(test_file_name)
+                else:
+                    continue
+                    
+            if not files_to_modify or not original_code:
+                logger.warning("No files to modify or original code found")
+                return None
+
+            # 获取unittest代码
+            unittest_code = ''
+            test_patch_modify_files = test_files["modified"] + test_files["added"] 
+            for test_file_name in test_patch_modify_files:
+                full_file_path = os.path.join(temp_dir, test_file_name)
+                if os.path.exists(full_file_path):
+                    with open(full_file_path, 'r') as f:
+                        file_content = f.read()
+                        unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+                else:
+                    continue
+        
+        # 构建最终prompt
+        prompt = template['prompt_template'].format(
+            original_code=original_code,
+            unittest_code=unittest_code,
+            example_problem_statement_1=example_problem_statement_1,
+            example_buggy_files_1=example_buggy_files_1,
+            example_problem_statement_2=selected_examples[0]['problem_statement'],
+            example_buggy_files_2=selected_examples[0]['buggy_files'],
+            example_problem_statement_3=selected_examples[1]['problem_statement'],
+            example_buggy_files_3=selected_examples[1]['buggy_files']
+        )
+
+        # 检查token限制
+        try:
+            if count_tokens(prompt) < 100000:  # 增加三个示例的token限制
+                return prompt
+            else:
+                logger.warning("Prompt exceeds token limit")
+                return None
+        except:
+            logger.warning("Failed to count tokens, using prompt anyway")
+            return prompt
+            
+    except Exception as e:
+        logger.error(f"Error reconstructing prompt: {e}")
+        return None

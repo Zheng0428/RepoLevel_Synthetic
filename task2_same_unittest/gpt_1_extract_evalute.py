@@ -25,6 +25,8 @@ from gpt_1_utils import (
     save_all_tasks_with_state, load_all_tasks_with_state,
     load_processed_ids_from_output, load_perfect_tasks_from_output,
     append_results_to_jsonl,
+    # Prompt reconstruction
+    reconstruct_three_shot_prompt,
     # Constants
     NON_TEST_EXTS
 )
@@ -674,22 +676,13 @@ if __name__ == "__main__":
             else:
                 logger.info("Regenerating LLM responses for failed tasks...")
             
-            # Create a function to process a single task for concurrent execution
-            def process_single_task(task):
-                new_response_content = get_llm_response(task['prompt'])
-                # Structure the new response to match the initial format
-                task['meta_response'] = json.dumps({
-                    'choices': [{'message': {'content': new_response_content}}]
-                })
-                return task
-            
             # Use ThreadPoolExecutor for concurrent requests with progress bar
             max_workers = min(10, len(tasks_to_process))
             
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit all tasks
+                # Submit all tasks with reconstruction
                 future_to_task = {
-                    executor.submit(process_single_task, task): task
+                    executor.submit(process_single_task_with_reconstruction, task, all_perfect_tasks, DEFAULT_PATH): task
                     for task in tasks_to_process
                 }
                 

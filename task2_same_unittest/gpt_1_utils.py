@@ -542,10 +542,6 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
     logger.info(f"Appended {len(output_data)} results to {output_file}")
     return output_data
 
-# Add these imports at the top if not already present
-import random
-from common import read_yaml, count_tokens
-from utils import get_llm_response
 
 def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     """

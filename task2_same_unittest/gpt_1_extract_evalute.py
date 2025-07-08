@@ -4,7 +4,7 @@ import subprocess
 import sys
 import time
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
@@ -592,6 +592,44 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     
     return analysis_results
 
+def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list, repo_path: str) -> dict:
+    """
+    Attempts to reconstruct the prompt for a task using the new function.
+    If successful, uses the reconstructed prompt to get a new response.
+    Otherwise, falls back to the original method.
+    """
+    try:
+        # Attempt to reconstruct the prompt
+        logger.info(f"Attempting prompt reconstruction for task {task.get('instance_id', 'unknown')}")
+        
+        # Use the new reconstruction function
+        reconstructed_prompt = reconstruct_three_shot_prompt(
+            task_item=task,
+            repo_path=repo_path,
+            sample_data=all_perfect_tasks
+        )
+        
+        if reconstructed_prompt and reconstructed_prompt.strip():
+            logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
+            
+            # Get a new response using the reconstructed prompt
+            new_response = get_llm_response(reconstructed_prompt)
+            
+            # Update the task with the new prompt and response
+            task_copy = task.copy()
+            task_copy['messages'] = [{"role": "user", "content": reconstructed_prompt}]
+            task_copy['response'] = new_response
+            
+            logger.info(f"Generated new response for task {task.get('instance_id', 'unknown')}")
+            return task_copy
+        else:
+            logger.warning(f"Prompt reconstruction returned empty for task {task.get('instance_id', 'unknown')}, using original")
+            return task
+            
+    except Exception as e:
+        logger.error(f"Failed to reconstruct prompt for task {task.get('instance_id', 'unknown')}: {e}")
+        return task
+
 # ================== Main Execution ==================
 
 if __name__ == "__main__":
@@ -682,7 +720,7 @@ if __name__ == "__main__":
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks with reconstruction
                 future_to_task = {
-                    executor.submit(process_single_task_with_reconstruction, task, all_perfect_tasks, DEFAULT_PATH): task
+                    executor.submit(process_single_task_with_reconstruction, task, initial_tasks, DEFAULT_PATH): task
                     for task in tasks_to_process
                 }
                 

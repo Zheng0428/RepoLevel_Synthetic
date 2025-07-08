@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
 import tiktoken, yaml
+
+
 def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
     """
     计算输入字符串的token数。

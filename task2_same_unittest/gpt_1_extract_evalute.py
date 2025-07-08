@@ -715,7 +715,7 @@ if __name__ == "__main__":
                 logger.info("Regenerating LLM responses for failed tasks...")
             
             # Use ThreadPoolExecutor for concurrent requests with progress bar
-            max_workers = min(10, len(tasks_to_process))
+            max_workers = min(1, len(tasks_to_process))
             
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # Submit all tasks with reconstruction

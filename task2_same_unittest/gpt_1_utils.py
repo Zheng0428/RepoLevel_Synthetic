@@ -542,6 +542,11 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
     logger.info(f"Appended {len(output_data)} results to {output_file}")
     return output_data
 
+# Add these imports at the top if not already present
+import random
+from common import read_yaml, count_tokens
+from utils import get_llm_response
+
 def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     """
     Reconstructs a three-shot prompt based on task items, repository paths, and sample data.
@@ -549,7 +554,7 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
     
     Args:
         task_item: The current task item containing instance_id, repo info, patches, etc.
-        repo_path: Base path to the repository
+        repo_path: Base path to the repository (already processed)
         sample_data: List of successful sample tasks to use for examples
         
     Returns:
@@ -572,69 +577,31 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
             logger.warning(f"Source testbed not found: {source_testbed}")
             return ""
         
-        # Extract current task's example (similar to data_loader.py logic)
+        # Extract current task's example information
         example_problem_statement_1 = task_item.get('problem_statement', '')
-        origin_patch = task_item.get('patch', '')
         
-        if not origin_patch:
-            logger.warning("No patch found in task item")
-            return ""
-        
-        # Get files that will be modified by the patch
-        patch_files = get_all_filenames(origin_patch)
-        modified_files = patch_files.get("modified", []) + patch_files.get("added", [])
-        
-        if not modified_files:
-            logger.warning("No modified files found in patch")
-            return ""
-        
-        # Create temporary environment and apply patch to get buggy code
+        # Read buggy files directly from the processed repo
         example_buggy_files_1 = ""
-        try:
-            with TempTestbed(source_testbed=source_testbed, copy_files=modified_files) as temp_testbed:
-                temp_dir = temp_testbed.temp_dir
-                
-                # Write patch to temporary file
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as patch_file:
-                    patch_file.write(origin_patch)
-                    patch_file_path = patch_file.name
-                
-                try:
-                    # Apply patch to get the modified (buggy) content
-                    patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {patch_file_path}'
-                    result = subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
-                    
-                    if result.returncode != 0:
-                        logger.warning(f"Failed to apply patch: {result.stderr}")
-                        return ""
-                    
-                    # Read all modified files to get example buggy code
-                    for file_path in modified_files:
-                        example_file_full_path = os.path.join(temp_dir, file_path)
-                        
-                        if os.path.exists(example_file_full_path):
-                            with open(example_file_full_path, 'r') as f:
-                                file_content = f.read()
-                                example_buggy_files_1 += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
-                    
-                    if not example_buggy_files_1:
-                        logger.warning("No buggy files content extracted")
-                        return ""
-                        
-                finally:
-                    # Clean up temporary patch file
-                    os.unlink(patch_file_path)
-                    
-        except Exception as e:
-            logger.error(f"Error creating temporary testbed: {e}")
+        input_files = task_item.get('input_files', [])
+        noise_files = task_item.get('noise_files', [])
+        
+        for file_path in input_files + noise_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    example_buggy_files_1 += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+        
+        if not example_buggy_files_1:
+            logger.warning("No buggy files content found for current task")
             return ""
         
-        # Get two additional examples from sample_data (similar to data_loader.py)
+        # Get two additional examples from sample_data
         if len(sample_data) < 2:
             logger.warning("Not enough sample data for three-shot prompt")
             return ""
         
-        # Randomly sample and process examples
+        # Randomly sample examples
         available_samples = [s for s in sample_data if s.get('instance_id') != task_item.get('instance_id')]
         if len(available_samples) < 2:
             logger.warning("Not enough available samples for examples")
@@ -647,52 +614,30 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
             try:
                 sample_problem_statement = sample_item.get('problem_statement', '')
                 sample_repo_name = sample_item.get('repo', '').replace('/', '__') + '__' + sample_item.get('base_commit', '')[:6]
-                sample_origin_patch = sample_item.get('patch', '')
                 sample_source_testbed = os.path.join(repo_path, sample_repo_name)
                 
-                if not os.path.exists(sample_source_testbed) or not sample_origin_patch:
+                if not os.path.exists(sample_source_testbed):
                     continue
                 
-                sample_patch_files = get_all_filenames(sample_origin_patch)
-                sample_modified_files = sample_patch_files.get("modified", []) + sample_patch_files.get("added", [])
-                
-                if not sample_modified_files:
-                    continue
-                
-                # Process sample similar to main example
+                # Read sample buggy files directly
                 sample_example_buggy_files = ""
-                with TempTestbed(source_testbed=sample_source_testbed, copy_files=sample_modified_files) as sample_temp_testbed:
-                    sample_temp_dir = sample_temp_testbed.temp_dir
+                sample_input_files = sample_item.get('input_files', [])
+                sample_noise_files = sample_item.get('noise_files', [])
+                
+                for file_path in sample_input_files + sample_noise_files:
+                    sample_file_full_path = os.path.join(sample_source_testbed, file_path)
+                    if os.path.exists(sample_file_full_path):
+                        with open(sample_file_full_path, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                            sample_example_buggy_files += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+                
+                if sample_example_buggy_files:
+                    candidate_examples.append({
+                        'problem_statement': sample_problem_statement,
+                        'buggy_files': sample_example_buggy_files,
+                        'buggy_files_length': len(sample_example_buggy_files)
+                    })
                     
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as sample_patch_file:
-                        sample_patch_file.write(sample_origin_patch)
-                        sample_patch_file_path = sample_patch_file.name
-                    
-                    try:
-                        sample_patch_cmd = f'cd {sample_temp_dir} && git apply --whitespace=nowarn {sample_patch_file_path}'
-                        sample_result = subprocess.run(sample_patch_cmd, shell=True, capture_output=True, text=True)
-                        
-                        if sample_result.returncode != 0:
-                            continue
-                        
-                        for file_path in sample_modified_files:
-                            sample_example_file_full_path = os.path.join(sample_temp_dir, file_path)
-                            
-                            if os.path.exists(sample_example_file_full_path):
-                                with open(sample_example_file_full_path, 'r') as f:
-                                    file_content = f.read()
-                                    sample_example_buggy_files += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
-                        
-                        if sample_example_buggy_files:
-                            candidate_examples.append({
-                                'problem_statement': sample_problem_statement,
-                                'buggy_files': sample_example_buggy_files,
-                                'buggy_files_length': len(sample_example_buggy_files)
-                            })
-                            
-                    finally:
-                        os.unlink(sample_patch_file_path)
-                        
             except Exception as e:
                 logger.warning(f"Error processing sample example: {e}")
                 continue
@@ -705,62 +650,50 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
         candidate_examples.sort(key=lambda x: x['buggy_files_length'])
         selected_examples = candidate_examples[:2]
         
-        # Get original code and unittest code (similar to data_loader.py)
-        patch_files = get_all_filenames(task_item.get('patch', ''))
-        test_files = get_all_filenames(task_item.get('test_patch', ''))
-        files_to_copy = list(set(
-            patch_files.get("modified", []) + 
-            patch_files.get("added", []) +
-            test_files.get("modified", []) + 
-            test_files.get("added", [])
-        ))
-        
-        patch = task_item.get('patch', '')
-        test_patch = task_item.get('test_patch', '')
-        
+        # Get original code (clean version before bug)
         original_code = ''
+        
+        # Read the original files from the repository (assuming they are the clean versions)
+        for file_path in input_files + noise_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        
+        # Get unittest code
         unittest_code = ''
+        test_files = task_item.get('test_files', [])  # Assuming test files are specified
         
-        try:
-            with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
-                temp_dir = temp_testbed.temp_dir
-                
-                # Apply patches
-                patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {patch}'
-                subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
-                
-                if test_patch:
-                    test_patch_cmd = f'cd {temp_dir} && git apply --whitespace=nowarn {test_patch}'
-                    subprocess.run(test_patch_cmd, shell=True, capture_output=True, text=True)
-                
-                # Get original code
-                input_files = task_item.get('input_files', [])
-                noise_files = task_item.get('noise_files', [])
-                test_file = input_files + noise_files
-                
-                for test_file_name in test_file:
-                    full_file_path = os.path.join(temp_dir, test_file_name)
-                    if os.path.exists(full_file_path):
-                        with open(full_file_path, 'r') as f:
-                            file_content = f.read()
-                            original_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-                
-                # Get unittest code
-                test_patch_modify_files = test_files.get("modified", []) + test_files.get("added", [])
-                for test_file_name in test_patch_modify_files:
-                    full_file_path = os.path.join(temp_dir, test_file_name)
-                    if os.path.exists(full_file_path):
-                        with open(full_file_path, 'r') as f:
-                            file_content = f.read()
-                            unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-                
-        except Exception as e:
-            logger.error(f"Error getting original and unittest code: {e}")
+        for test_file_name in test_files:
+            full_file_path = os.path.join(source_testbed, test_file_name)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        
+        if not original_code:
+            logger.warning("Missing original code")
             return ""
         
-        if not original_code or not unittest_code:
-            logger.warning("Missing original code or unittest code")
-            return ""
+        # If no specific test files, try to find test files in the repository
+        if not unittest_code:
+            try:
+                for root, dirs, files in os.walk(source_testbed):
+                    for file in files:
+                        if file.endswith('.py') and ('test' in file.lower() or file.startswith('test_')):
+                            test_file_path = os.path.join(root, file)
+                            relative_path = os.path.relpath(test_file_path, source_testbed)
+                            with open(test_file_path, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                                unittest_code += f"File Name: {relative_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+                            break  # Use only the first test file found
+            except Exception as e:
+                logger.warning(f"Error finding test files: {e}")
+        
+        if not unittest_code:
+            logger.warning("No unittest code found, using empty string")
+            unittest_code = "# No test files found"
         
         # Build final prompt using template
         prompt = template['prompt_template'].format(

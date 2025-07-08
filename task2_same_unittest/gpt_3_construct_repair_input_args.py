@@ -158,7 +158,7 @@ def main(tokenizer_path, save_path, dataset_jsonl, max_input_tokens, max_noise_f
 """
 pip install typing_extensions --upgrade
 export PROJECT_FILE_LOC=/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/structure
-python /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/task2_same_unittest/gpt_4_construct_repair_input_args.py \
+python /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/task2_same_unittest/gpt_3_construct_repair_input_args.py \
 --tokenizer_path /mnt/hdfs/tiktok_aiic/user/codeai/hf_models/Qwen2.5-Coder-32B-Instruct \
 --save_path /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/gpt_4_ready_train_gpt4o.jsonl \
 --dataset_jsonl /mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/gpt_3_seg_bug_success_with_noise_gpt4o.jsonl \

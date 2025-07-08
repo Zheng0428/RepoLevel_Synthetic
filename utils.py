@@ -1171,3 +1171,6 @@ def get_llm_response(prompt: str) -> str:
         return f"An unexpected error occurred: {e}"
 
 
+if __name__ == "__main__":
+    response = get_llm_response('中国的首都是哪里？')
+    print(response)

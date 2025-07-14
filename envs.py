@@ -45,8 +45,8 @@ TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 
 
 # Define the API endpoint and API key
-BASE_URL = "http://maas.byteintl.net/gateway/v1/chat/completions"
-API_KEY = "sk-1234"  # Replace with your actual API key
-MODEL = "gemini-2.5-pro-preview-05-06" # gcp-claude37-sonnet/gemini-2.5-pro-preview-05-06/gpt-4o-2024-11-20
+BASE_URL = "https://search-va.byteintl.net/gpt/openapi/online/v2/crawl/openai/deployments/gpt_openapi" #http://maas.byteintl.net/gateway/v1/chat/completions
+API_KEY = "54nhP5uBXv7iWgHJ4bWMD90Nwkn09BXN"  # Replace with your actual API key
+MODEL = "gcp-claude37-sonnet" # gcp-claude37-sonnet/gemini-2.5-pro-preview-05-06/gpt-4o-2024-11-20
 MAX_TOKENS = 16000
 SYSTEM_PROMPT = "You are a very helpful assistant."

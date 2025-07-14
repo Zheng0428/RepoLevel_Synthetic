@@ -34,7 +34,7 @@ import time
 time_string = time.strftime("%Y-%m-%d")  # Format: 2025-04-05_14-30-45  
 # Define the log path with the timestamp  
 RUN_NAME = os.environ.get('RUN_NAME','sweb_eval')
-ORIGIN_DEFAULT_PATH = "/opt/tiger/expr/repo_commit"
+ORIGIN_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
 DEFAULT_PATH = "/opt/tiger/expr/true_repo_commit"
 NEW_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
 GENERATE_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data'
@@ -47,6 +47,6 @@ TEST_PATCH_PATH='/opt/tiger/expr/test_patch/'
 # Define the API endpoint and API key
 BASE_URL = "http://maas.byteintl.net/gateway/v1/chat/completions"
 API_KEY = "sk-1234"  # Replace with your actual API key
-MODEL = "gpt-4o-2024-11-20" # The specific model to use
+MODEL = "gemini-2.5-pro-preview-05-06" # gcp-claude37-sonnet/gemini-2.5-pro-preview-05-06/gpt-4o-2024-11-20
 MAX_TOKENS = 16000
 SYSTEM_PROMPT = "You are a very helpful assistant."

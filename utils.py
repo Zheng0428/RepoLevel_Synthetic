@@ -1154,10 +1154,10 @@ def get_llm_response(prompt: str, temperature: float = 0.7) -> str:
                 timeout=600  # 10-minute timeout
             )
             
-            print(f"API Response Status: {response.status_code}")
+            # print(f"API Response Status: {response.status_code}")
             if response.status_code == 200:
                 response_json = response.json()
-                print(response_json)
+                # print(response_json)
                 
                 if "choices" in response_json and len(response_json["choices"]) > 0:
                     response_text = response_json["choices"][0]["message"]["content"]

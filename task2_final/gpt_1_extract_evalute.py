@@ -534,9 +534,18 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     for task in tasks:
         instance_id = task.get('instance_id', 'unknown')
         try:
-            # The response is inside 'meta_response'
-            meta_response = json.loads(task.get('meta_response'))
-            response = meta_response['choices'][0]['message']['content']
+            # Check if task has 'response' field (from regenerated prompt) or 'meta_response' (original)
+            if 'response' in task:
+                # Use the regenerated response
+                response = task['response']
+            elif 'meta_response' in task:
+                # Use the original meta_response (fallback for compatibility)
+                meta_response = json.loads(task.get('meta_response'))
+                response = meta_response['choices'][0]['message']['content']
+            else:
+                logger.warning(f"Skipping {instance_id}: No response or meta_response found.")
+                failed_ids.add(instance_id)
+                continue
             
             if not isinstance(response, str) or not response:
                 logger.warning(f"Skipping {instance_id}: Response is not a valid string.")
@@ -709,41 +718,37 @@ if __name__ == "__main__":
         logger.info(f"--- Starting Attempt {attempt}/{max_attempts} ---")
         logger.info(f"Processing {len(tasks_to_process)} tasks.")
 
-        # If this is a retry (attempt > 1) OR restart mode, regenerate the LLM response.
-        if attempt > 1 or args.restart:
-            if args.restart and attempt == 1:
-                logger.info("Restart mode: Regenerating LLM responses for remaining tasks...")
-            else:
-                logger.info("Regenerating LLM responses for failed tasks...")
+        # For ALL attempts, regenerate the LLM response using prompt reconstruction
+        logger.info(f"Generating LLM responses for attempt {attempt}...")
+        
+        # Use ThreadPoolExecutor for concurrent requests with progress bar
+        max_workers = min(20, len(tasks_to_process))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks with reconstruction
+            future_to_task = {
+                executor.submit(process_single_task_with_reconstruction, task, all_perfect_tasks, DEFAULT_PATH): task
+                for task in tasks_to_process
+            }
             
-            # Use ThreadPoolExecutor for concurrent requests with progress bar
-            max_workers = min(20, len(tasks_to_process))
+            # Process completed tasks with progress bar
+            completed_tasks = []
+            desc = f"Generating LLM responses (attempt {attempt})"
+            with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
+                for future in as_completed(future_to_task):
+                    try:
+                        completed_task = future.result()
+                        completed_tasks.append(completed_task)
+                    except Exception as e:
+                        original_task = future_to_task[future]
+                        logger.error(f"Failed to process task {original_task.get('instance_id', 'unknown')}: {e}")
+                        # Keep the original task if processing failed
+                        completed_tasks.append(original_task)
+                    finally:
+                        pbar.update(1)
             
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit all tasks with reconstruction
-                future_to_task = {
-                    executor.submit(process_single_task_with_reconstruction, task, initial_tasks, DEFAULT_PATH): task
-                    for task in tasks_to_process
-                }
-                
-                # Process completed tasks with progress bar
-                completed_tasks = []
-                desc = "Regenerating LLM responses (restart)" if args.restart and attempt == 1 else "Regenerating LLM responses (retry)"
-                with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
-                    for future in as_completed(future_to_task):
-                        try:
-                            completed_task = future.result()
-                            completed_tasks.append(completed_task)
-                        except Exception as e:
-                            original_task = future_to_task[future]
-                            logger.error(f"Failed to process task {original_task.get('instance_id', 'unknown')}: {e}")
-                            # Keep the original task if processing failed
-                            completed_tasks.append(original_task)
-                        finally:
-                            pbar.update(1)
-                
-                # Update tasks_to_process with the completed tasks
-                tasks_to_process = completed_tasks
+            # Update tasks_to_process with the completed tasks
+            tasks_to_process = completed_tasks
         
         # Phase 1: Extract Patches from LLM responses
         extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)

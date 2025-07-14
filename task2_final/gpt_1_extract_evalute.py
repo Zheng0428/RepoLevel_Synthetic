@@ -653,7 +653,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # --- Define output file ---
-    final_output_file = f"{GENERATE_DATA_PATH}/gpt_2_finish_bug_gpt4o.jsonl"
+    final_output_file = f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o.jsonl"
 
     # --- Load Initial Data ---
     # Always load initial data from the source file

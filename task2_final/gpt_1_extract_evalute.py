@@ -698,14 +698,14 @@ if __name__ == "__main__":
             task for task in initial_tasks 
             if task['instance_id'] not in processed_ids
         ]
-        tasks_to_process = tasks_to_process[:10]
+        tasks_to_process = tasks_to_process
         logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
         logger.info(f"Already processed: {len(processed_ids)} tasks")
         logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")
         
     else:
         # Normal initialization
-        tasks_to_process = initial_tasks[:10]
+        tasks_to_process = initial_tasks
         all_perfect_results = {}
         all_perfect_tasks = []
         processed_ids = set()

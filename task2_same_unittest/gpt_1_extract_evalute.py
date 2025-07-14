@@ -20,9 +20,6 @@ from gpt_1_utils import (
     parse_bug_response, generate_patches_for_bug_data,
     # Command execution
     run_command_with_timeout, make_test_command_for_gpt,
-    # File I/O
-    save_checkpoint_state, load_checkpoint_state,
-    save_all_tasks_with_state, load_all_tasks_with_state,
     load_processed_ids_from_output, load_perfect_tasks_from_output,
     append_results_to_jsonl,
     # Prompt reconstruction

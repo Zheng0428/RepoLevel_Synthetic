@@ -34,7 +34,7 @@ import time
 time_string = time.strftime("%Y-%m-%d")  # Format: 2025-04-05_14-30-45  
 # Define the log path with the timestamp  
 RUN_NAME = os.environ.get('RUN_NAME','sweb_eval')
-ORIGIN_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
+ORIGIN_DEFAULT_PATH = os.environ.get('ORIGIN_DEFAULT_PATH', '/opt/tiger/expr/repo_commit')
 DEFAULT_PATH = "/opt/tiger/expr/true_repo_commit"
 NEW_DEFAULT_PATH = "/opt/tiger/expr/synthetic_repo_commit"
 GENERATE_DATA_PATH='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data'

@@ -1,5 +1,5 @@
 import json
-from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH
+from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH, NEW_DEFAULT_PATH
 import os, re
 from utils import fake_git_repo
 import random
@@ -262,7 +262,7 @@ def process_data_entry(data, args, save_structure_dir):
         instance_id = new_data['instance_id']
         
         repo_playground = os.path.join(DEFAULT_PATH, new_data['repo_base_name'])
-        new_repo_playground = os.path.join(ORIGIN_DEFAULT_PATH, new_data['instance_id'])
+        new_repo_playground = os.path.join(NEW_DEFAULT_PATH, new_data['instance_id'])
         
         # 应用patches并创建buggy repo
         success = apply_patches_and_create_buggy_repo(new_data, repo_playground, new_repo_playground)

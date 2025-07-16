@@ -736,42 +736,6 @@ def retry_tasks_in_parallel(tasks_need_retry: List[dict]) -> List[dict]:
     
     return retried_tasks
 
-def run_init_with_retry_logic(tasks_to_evaluate: List[dict]) -> Tuple[List[dict], dict]:
-    """
-    运行init测试，检查测试数量，重试不足的任务，然后重新运行init测试
-    
-    Args:
-        tasks_to_evaluate: 要评估的任务列表
-        
-    Returns:
-        Tuple[List[dict], dict]: (最终任务列表, 最终init结果)
-    """
-    # 第一次运行init测试
-    logger.info("Starting initial init state evaluation...")
-    init_results = test_init(tasks_to_evaluate, 50, 45)
-    
-    # 检查并重试不足的任务
-    final_tasks = check_and_retry_insufficient_tests(tasks_to_evaluate, init_results)
-    
-    # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
-    logger.info("Re-running init state evaluation with final task set...")
-    final_init_results = test_init(final_tasks, 50, 45)
-    
-    return final_tasks, final_init_results
-
-def run_gpt_bug_evaluation(final_tasks: List[dict]) -> dict:
-    """
-    运行GPT bug评估
-    
-    Args:
-        final_tasks: 最终的任务列表
-        
-    Returns:
-        dict: GPT bug测试结果
-    """
-    logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(final_tasks, 50, 45)
-    return gpt_bug_results
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     """
@@ -792,15 +756,22 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
             'perfect_tests': {}, 'init_failed': {}, 'bug_not_detected': {}, 'other_cases': {}
         })
 
-    # Production mode: 运行带有重试逻辑的init测试
-    final_tasks, init_results = run_init_with_retry_logic(tasks_to_evaluate)
+    # 第一次运行init测试
+    logger.info("Starting initial init state evaluation...")
+    init_results = test_init(tasks_to_evaluate, 50, 45)
     
-    # 运行GPT bug评估
-    gpt_bug_results = run_gpt_bug_evaluation(final_tasks)
+    # 检查并重试不足的任务
+    final_tasks = check_and_retry_insufficient_tests(tasks_to_evaluate, init_results)
+    
+    # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
+    logger.info("Re-running init state evaluation with final task set...")
+    final_init_results = test_init(final_tasks, 50, 45)
+    logger.info("Starting GPT bug evaluation...")
+    gpt_bug_results = test_gpt_bug(final_init_results, 50, 45)
     
     # 分析结果
     logger.info("Analyzing combined results...")
-    analysis_results = analyze_combined_results(init_results, gpt_bug_results)
+    analysis_results = analyze_combined_results(final_init_results, gpt_bug_results)
     
     return analysis_results
 

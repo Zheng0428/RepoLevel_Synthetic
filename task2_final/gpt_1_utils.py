@@ -35,7 +35,7 @@ def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
         return 1000000
 
 def read_yaml(config='default'):
-    yaml_file = f'/mnt/bn/tiktok-mm-5/aiic/users/tianyu/MagicData/config/prompt/{config}.yaml'
+    yaml_file = f'/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/prompt/{config}.yaml'
     with open(yaml_file, 'r', encoding='utf-8') as yaml_file:
         return yaml.safe_load(yaml_file)
 

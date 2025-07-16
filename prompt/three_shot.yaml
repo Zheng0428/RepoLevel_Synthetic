@@ -37,6 +37,7 @@ prompt_template: |
     - Provide a COMPLETE unittest file that tests the functionality and detects the bug
     - The unittest should pass when testing the original clean code but fail when testing the buggy code
     - Follow the exact output format below for easy parsing
+    - **GENERATE EXTENSIVE TEST CASES**: Create at least 8-12 individual test methods to ensure comprehensive coverage
 
     ## Output Format:
     ===PROBLEM_STATEMENT_START===
@@ -59,6 +60,7 @@ prompt_template: |
     - Key test scenarios covered by the unittest
     - How the unittest comprehensively validates the functionality
     - Specific test cases designed to catch the introduced bug
+    - Description of pass-to-pass test cases that verify core functionality remains intact
     ===BUG_ANALYSIS_END===
 
     ===BUGGY_FILES_START===
@@ -102,12 +104,13 @@ prompt_template: |
     2. **Unittest Quality**: The generated unittest must:
        - **PASS ALL TESTS** when testing the original clean code
        - **FAIL SPECIFIC TESTS** when testing the buggy code
-       - Provide comprehensive coverage of the functionality
-       - Include edge cases and boundary conditions
+       - **GENERATE AT LEAST 8-12 TEST METHODS** for comprehensive coverage
+       - Include extensive edge cases and boundary conditions
        - Use appropriate test methods (assertEqual, assertTrue, assertRaises, etc.)
        - Follow proper unittest structure with setUp/tearDown if needed
        - Include descriptive test method names and docstrings
        - Test both normal functionality and error conditions
+       - **Include pass-to-pass test cases** that verify core functionality works correctly in both buggy and clean versions
 
     3. **Problem Statement Style**: Write the problem statement like a GitHub issue:
        - Focus on user-visible symptoms and impact
@@ -116,11 +119,18 @@ prompt_template: |
        - Be concise but clear about the problem
 
     4. **Test Design Strategy**: The unittest should:
-       - Cover the main functionality comprehensively
-       - Include specific test cases that will catch the introduced bug
-       - Test edge cases and boundary conditions
+       - **Create COMPREHENSIVE test coverage** with multiple test methods
+       - Include specific test cases that will catch the introduced bug (fail-to-pass cases)
+       - Include test cases that should pass in both versions (pass-to-pass cases)
+       - Test edge cases and boundary conditions extensively
        - Validate both successful operations and error handling
        - Use meaningful assertions that clearly indicate what went wrong
+       - **Target minimum 8-12 individual test methods** covering different aspects of functionality
+
+    5. **Test Case Distribution**:
+       - **Bug-detecting tests (fail-to-pass)**: 3-5 test methods that fail with the bug but pass with clean code
+       - **Core functionality tests (pass-to-pass)**: 5-9 test methods that should pass regardless of the bug to ensure other functionality is preserved
+       - Include tests for normal use cases, edge cases, error conditions, and integration scenarios
 
     ## Important Notes:
     - All code must be wrapped in ```python blocks for proper syntax highlighting
@@ -129,4 +139,6 @@ prompt_template: |
     - Focus on creating sophisticated bugs that challenge debugging skills rather than obvious errors
     - The unittest should be production-quality with proper structure, documentation, and coverage
     - Ensure the unittest is self-contained and can be run independently
+    - **EMPHASIZE QUANTITY**: Generate extensive test methods to ensure comprehensive validation
     - The bug should be subtle enough that it might pass casual inspection but will be caught by thorough testing
+    - Include both specific bug-detection tests and general functionality preservation tests

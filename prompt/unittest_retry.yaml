@@ -1,0 +1,120 @@
+prompt_template: |
+    The previous unittest generation did not produce enough test cases (fewer than 5 passing tests were detected). You need to regenerate BOTH the buggy code and a much more comprehensive unittest file with extensive test coverage.
+
+    ## Original Clean Code:
+    {original_code}
+
+    ## Previous Problem Statement:
+    {problem_statement}
+
+    ## Task:
+    Regenerate BOTH the buggy code and unittest for the same problem statement, but this time create a MUCH MORE COMPREHENSIVE unittest with significantly more test cases to ensure thorough coverage and detection of the bug.
+
+    ## Requirements:
+    1. **Keep the same problem statement** - do not change the bug concept
+    2. **Regenerate the buggy code** - you may refine the bug implementation to be more subtle or effective
+    3. **Create EXTENSIVE unittest coverage** with at least 12-15 individual test methods
+    4. **Ensure robust test detection** - the unittest must reliably detect the bug
+    5. **Include comprehensive pass-to-pass tests** that verify core functionality remains intact
+
+    ## Output Format:
+    ===PROBLEM_STATEMENT_START===
+    {problem_statement}
+    ===PROBLEM_STATEMENT_END===
+
+    ===BUG_ANALYSIS_START===
+    **Test Detection Analysis:**
+    - Which specific test methods/cases in the generated unittest will detect this bug
+    - Why the bug causes those particular tests to fail
+    - Under what conditions the bug manifests
+    - Expected vs actual behavior that causes test failures
+
+    **Bug Characteristics:**
+    - Type of programming error introduced
+    - Why this bug is subtle and difficult to detect through code review
+    - What makes this bug realistic (common developer mistakes)
+    - Any refinements made to improve bug detectability
+
+    **Unittest Design:**
+    - Comprehensive list of test scenarios covered (aim for 12-15+ test methods)
+    - How the unittest comprehensively validates the functionality
+    - Specific test cases designed to catch the introduced bug
+    - Description of pass-to-pass test cases that verify core functionality remains intact
+    - Strategy for maximizing test coverage and reliability
+    ===BUG_ANALYSIS_END===
+
+    ===BUGGY_FILES_START===
+    ===FILE_START===
+    FILE_PATH: [exact file path]
+    ===CODE_START===
+    ```python
+    [complete buggy code for this file - refined version that may be more detectable]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+
+    ===FILE_START===
+    FILE_PATH: [exact file path for second file if needed]
+    ===CODE_START===
+    ```python
+    [complete buggy code for this file - must be the full file content, not snippets]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+
+    [Repeat FILE_START/FILE_END blocks for additional files if necessary]
+    ===BUGGY_FILES_END===
+
+    ===UNITTEST_FILE_START===
+    FILE_PATH: [unittest file path, e.g., test_[module_name].py]
+    ===CODE_START===
+    ```python
+    [comprehensive unittest code with 12-15+ test methods that thoroughly tests the functionality]
+    ```
+    ===CODE_END===
+    ===UNITTEST_FILE_END===
+
+    ## Critical Requirements for Enhanced Unittest:
+
+    1. **Extensive Test Coverage (12-15+ test methods)**:
+       - **Basic functionality tests**: 4-6 methods testing core features
+       - **Bug detection tests**: 3-5 methods specifically targeting the introduced bug
+       - **Edge case tests**: 3-4 methods testing boundary conditions and corner cases
+       - **Error handling tests**: 2-3 methods testing exception handling and error conditions
+       - **Integration tests**: 1-2 methods testing component interactions
+
+    2. **Test Method Categories**:
+       - **Pass-to-pass tests**: Should pass in both clean and buggy versions (testing unaffected functionality)
+       - **Fail-to-pass tests**: Should fail with buggy code but pass with clean code (detecting the bug)
+       - **Boundary tests**: Testing limits, empty inputs, maximum values, etc.
+       - **Error condition tests**: Testing how the code handles invalid inputs or error states
+
+    3. **Test Quality Standards**:
+       - Each test method should have a clear, descriptive name
+       - Include docstrings explaining what each test validates
+       - Use appropriate assertion methods (assertEqual, assertTrue, assertRaises, etc.)
+       - Include setUp/tearDown methods if needed for test isolation
+       - Test both positive and negative scenarios
+       - Cover different input types, sizes, and edge cases
+
+    4. **Bug Detection Strategy**:
+       - Create multiple test cases that approach the bug from different angles
+       - Include tests with various input combinations that trigger the bug
+       - Ensure the bug is detectable through multiple independent test methods
+       - Include regression tests that would catch if the bug is reintroduced
+
+    5. **Comprehensive Coverage Goals**:
+       - Test all public methods/functions in the target code
+       - Cover different execution paths through the code
+       - Test various input combinations and scenarios
+       - Include tests for performance-critical paths
+       - Validate both functional correctness and behavioral consistency
+
+    ## Important Notes:
+    - **QUANTITY IS CRUCIAL**: Aim for 12-15+ individual test methods minimum
+    - Focus on creating a robust test suite that would catch the bug reliably
+    - Include both specific bug-targeting tests and general functionality validation
+    - Ensure test methods are independent and can run in any order
+    - The enhanced unittest should provide confidence that the code works correctly
+    - Make sure to maintain the original problem statement exactly as provided
+    - Balance between bug detection and verification of unaffected functionality

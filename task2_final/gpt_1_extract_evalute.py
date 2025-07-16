@@ -571,6 +571,208 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     logger.info(f"Extraction phase summary: {len(extracted_tasks)} succeeded, {len(failed_ids)} failed parsing.")
     return extracted_tasks, failed_ids
 
+def retry_unittest_generation(task: dict, repo_path: str) -> Optional[dict]:
+    """
+    为单个任务重新生成unittest和buggy code
+    
+    Args:
+        task: 原始任务数据
+        repo_path: repo路径
+        
+    Returns:
+        Optional[dict]: 更新后的任务数据，失败时返回None
+    """
+    try:
+        instance_id = task.get('instance_id', 'unknown')
+        logger.info(f"Retrying unittest generation for task {instance_id}")
+        
+        # 构建重试prompt
+        repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
+        source_testbed = os.path.join(DEFAULT_PATH, repo_name)
+        
+        if not os.path.exists(source_testbed):
+            logger.warning(f"Source testbed not found: {source_testbed}")
+            return None
+        
+        # 读取原始代码
+        original_code = ''
+        input_files = task.get('input_files', [])
+        noise_files = task.get('noise_files', [])
+        
+        for file_path in input_files + noise_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        
+        if not original_code:
+            logger.warning(f"No original code found for task {instance_id}")
+            return None
+        
+        # 构建重试prompt
+        retry_template = read_yaml('unittest_retry')
+        if not retry_template or 'prompt_template' not in retry_template:
+            logger.error("unittest_retry template not found")
+            return None
+        
+        problem_statement = task.get('gpt_problem_statement', '')
+        if not problem_statement:
+            logger.warning(f"No problem statement found for task {instance_id}")
+            return None
+        
+        retry_prompt = retry_template['prompt_template'].format(
+            original_code=original_code,
+            problem_statement=problem_statement
+        )
+        
+        # 获取新的LLM响应
+        new_response = get_llm_response(retry_prompt)
+        if 'API request failed' in new_response:
+            logger.warning(f"API request failed for retry of task {instance_id}")
+            return None
+        
+        # 解析新响应
+        result = parse_bug_response(new_response)
+        if not result:
+            logger.warning(f"Failed to parse retry response for task {instance_id}")
+            return None
+        
+        # 生成新的patches
+        task_copy = task.copy()
+        task_copy['response'] = new_response  # 更新response
+        processed_data = generate_patches_for_bug_data(task_copy, result, DEFAULT_PATH)
+        
+        logger.info(f"Successfully retried unittest generation for task {instance_id}")
+        return processed_data
+        
+    except Exception as e:
+        logger.error(f"Error in retry_unittest_generation for task {task.get('instance_id', 'unknown')}: {e}")
+        return None
+
+def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_results: dict) -> List[dict]:
+    """
+    检查init测试结果，对PASSED cases < 5的任务进行重试
+    
+    Args:
+        tasks_to_evaluate: 原始任务列表
+        init_results: init测试结果
+        
+    Returns:
+        List[dict]: 最终的任务列表（包含重试后的任务）
+    """
+    logger.info("Checking test counts for retry...")
+    tasks_need_retry = []
+    tasks_sufficient = []
+    
+    for task in tasks_to_evaluate:
+        instance_id = task['instance_id']
+        if instance_id in init_results:
+            init_result = init_results[instance_id]
+            passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
+            passed_count = len(passed_tests)
+            
+            if passed_count < 5:
+                logger.info(f"Task {instance_id} has only {passed_count} passing tests, needs retry")
+                tasks_need_retry.append(task)
+            else:
+                logger.info(f"Task {instance_id} has {passed_count} passing tests, sufficient")
+                tasks_sufficient.append(task)
+        else:
+            logger.warning(f"Task {instance_id} not found in init results, adding to retry")
+            tasks_need_retry.append(task)
+    
+    # 开始处理重试
+    final_tasks = list(tasks_sufficient)  # 复制sufficient任务
+    
+    if tasks_need_retry:
+        logger.info(f"Retrying {len(tasks_need_retry)} tasks with insufficient test coverage...")
+        retried_tasks = retry_tasks_in_parallel(tasks_need_retry)
+        final_tasks.extend(retried_tasks)
+        logger.info(f"Retry phase completed. Total tasks: {len(final_tasks)}")
+    else:
+        logger.info("All tasks have sufficient test coverage, no retry needed")
+    
+    return final_tasks
+
+def retry_tasks_in_parallel(tasks_need_retry: List[dict]) -> List[dict]:
+    """
+    并行重试多个任务
+    
+    Args:
+        tasks_need_retry: 需要重试的任务列表
+        
+    Returns:
+        List[dict]: 重试后的任务列表
+    """
+    retried_tasks = []
+    max_workers = min(2, len(tasks_need_retry))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(retry_unittest_generation, task, DEFAULT_PATH): task
+            for task in tasks_need_retry
+        }
+        
+        desc = "Retrying unittest generation"
+        with tqdm(total=len(tasks_need_retry), desc=desc, unit="task") as pbar:
+            for future in as_completed(future_to_task):
+                try:
+                    retried_task = future.result()
+                    if retried_task:
+                        retried_tasks.append(retried_task)
+                        logger.info(f"Successfully retried task {retried_task.get('instance_id', 'unknown')}")
+                    else:
+                        # 如果重试失败，保留原任务
+                        original_task = future_to_task[future]
+                        retried_tasks.append(original_task)
+                        logger.warning(f"Retry failed for task {original_task.get('instance_id', 'unknown')}, keeping original")
+                except Exception as e:
+                    original_task = future_to_task[future]
+                    logger.error(f"Error retrying task {original_task.get('instance_id', 'unknown')}: {e}")
+                    retried_tasks.append(original_task)
+                finally:
+                    pbar.update(1)
+    
+    return retried_tasks
+
+def run_init_with_retry_logic(tasks_to_evaluate: List[dict]) -> Tuple[List[dict], dict]:
+    """
+    运行init测试，检查测试数量，重试不足的任务，然后重新运行init测试
+    
+    Args:
+        tasks_to_evaluate: 要评估的任务列表
+        
+    Returns:
+        Tuple[List[dict], dict]: (最终任务列表, 最终init结果)
+    """
+    # 第一次运行init测试
+    logger.info("Starting initial init state evaluation...")
+    init_results = test_init(tasks_to_evaluate, 50, 45)
+    
+    # 检查并重试不足的任务
+    final_tasks = check_and_retry_insufficient_tests(tasks_to_evaluate, init_results)
+    
+    # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
+    logger.info("Re-running init state evaluation with final task set...")
+    final_init_results = test_init(final_tasks, 50, 45)
+    
+    return final_tasks, final_init_results
+
+def run_gpt_bug_evaluation(final_tasks: List[dict]) -> dict:
+    """
+    运行GPT bug评估
+    
+    Args:
+        final_tasks: 最终的任务列表
+        
+    Returns:
+        dict: GPT bug测试结果
+    """
+    logger.info("Starting GPT bug evaluation...")
+    gpt_bug_results = test_gpt_bug(final_tasks, 50, 45)
+    return gpt_bug_results
+
 def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     """
     Runs the full evaluation pipeline (init, gpt_bug) and analysis.
@@ -590,13 +792,13 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
             'perfect_tests': {}, 'init_failed': {}, 'bug_not_detected': {}, 'other_cases': {}
         })
 
-    # Production mode: run the evaluations
-    logger.info("Starting init state evaluation...")
-    init_results = test_init(tasks_to_evaluate, 50, 45)
+    # Production mode: 运行带有重试逻辑的init测试
+    final_tasks, init_results = run_init_with_retry_logic(tasks_to_evaluate)
     
-    logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(tasks_to_evaluate, 50, 45)
+    # 运行GPT bug评估
+    gpt_bug_results = run_gpt_bug_evaluation(final_tasks)
     
+    # 分析结果
     logger.info("Analyzing combined results...")
     analysis_results = analyze_combined_results(init_results, gpt_bug_results)
     

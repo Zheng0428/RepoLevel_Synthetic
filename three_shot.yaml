@@ -1,0 +1,132 @@
+prompt_template: |
+    Given three examples of bugs introduced to Python code and a target Python code snippet, generate a new bug that follows similar patterns of realistic programming errors along with a comprehensive unittest file that can detect this bug.
+
+    ## Bug Example 1:
+    **Problem Statement:** {example_problem_statement_1}
+    
+    **Modified Files:**
+    {example_buggy_files_1}
+
+    ## Bug Example 2:
+    **Problem Statement:** {example_problem_statement_2}
+    
+    **Modified Files:**
+    {example_buggy_files_2}
+
+    ## Bug Example 3:
+    **Problem Statement:** {example_problem_statement_3}
+    
+    **Modified Files:**
+    {example_buggy_files_3}
+
+    ## Target Code (Original Clean Code):
+    {original_code}
+
+    ## Task:
+    Based on the bug patterns shown in the examples above, generate a NEW bug and corresponding unittest that:
+    1. **MUST be introduced into the Target Code above** (not the example codes)
+    2. Is different from all three examples but follows similar realistic programming error patterns
+    3. Would be something a developer might accidentally introduce
+    4. Maintains the overall structure and functionality of the original code
+    5. **Should be DIFFICULT and SUBTLE** - requiring deep understanding of the code logic, careful debugging skills, and thorough analysis to identify and fix
+    6. Should not cause obvious syntax errors or immediate crashes, but rather introduce logical errors that manifest under specific conditions
+    7. **Must be accompanied by a comprehensive unittest** that thoroughly tests the functionality and can detect the introduced bug
+
+    ## Output Requirements:
+    - Provide COMPLETE buggy code for each modified file (not partial snippets)
+    - Provide a COMPLETE unittest file that tests the functionality and detects the bug
+    - The unittest should pass when testing the original clean code but fail when testing the buggy code
+    - Follow the exact output format below for easy parsing
+
+    ## Output Format:
+    ===PROBLEM_STATEMENT_START===
+    [Describe the bug as a GitHub issue in the same format as the three examples above - focus on what's wrong, the symptoms, and impact. Keep it concise and user-focused without technical implementation details.]
+    ===PROBLEM_STATEMENT_END===
+
+    ===BUG_ANALYSIS_START===
+    **Test Detection Analysis:**
+    - Which specific test methods/cases in the generated unittest will detect this bug
+    - Why the bug causes those particular tests to fail
+    - Under what conditions the bug manifests
+    - Expected vs actual behavior that causes test failures
+
+    **Bug Characteristics:**
+    - Type of programming error introduced
+    - Why this bug is subtle and difficult to detect through code review
+    - What makes this bug realistic (common developer mistakes)
+
+    **Unittest Design:**
+    - Key test scenarios covered by the unittest
+    - How the unittest comprehensively validates the functionality
+    - Specific test cases designed to catch the introduced bug
+    ===BUG_ANALYSIS_END===
+
+    ===BUGGY_FILES_START===
+    ===FILE_START===
+    FILE_PATH: [exact file path]
+    ===CODE_START===
+    ```python
+    [complete buggy code for this file - must be the full file content, not snippets]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+
+    ===FILE_START===
+    FILE_PATH: [exact file path for second file if needed]
+    ===CODE_START===
+    ```python
+    [complete buggy code for this file - must be the full file content, not snippets]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+
+    [Repeat FILE_START/FILE_END blocks for additional files if necessary]
+    ===BUGGY_FILES_END===
+
+    ===UNITTEST_FILE_START===
+    FILE_PATH: [unittest file path, e.g., test_[module_name].py]
+    ===CODE_START===
+    ```python
+    [complete unittest code that thoroughly tests the functionality and can detect the introduced bug]
+    ```
+    ===CODE_END===
+    ===UNITTEST_FILE_END===
+
+    ## Critical Requirements:
+    1. **Bug Difficulty**: The bug must be HARD to detect and fix, involving:
+       - Subtle logical errors that only manifest under specific conditions
+       - Edge cases that are easily overlooked
+       - Complex interactions between different parts of the code
+       - Issues that require deep understanding of the algorithm or data flow
+
+    2. **Unittest Quality**: The generated unittest must:
+       - **PASS ALL TESTS** when testing the original clean code
+       - **FAIL SPECIFIC TESTS** when testing the buggy code
+       - Provide comprehensive coverage of the functionality
+       - Include edge cases and boundary conditions
+       - Use appropriate test methods (assertEqual, assertTrue, assertRaises, etc.)
+       - Follow proper unittest structure with setUp/tearDown if needed
+       - Include descriptive test method names and docstrings
+       - Test both normal functionality and error conditions
+
+    3. **Problem Statement Style**: Write the problem statement like a GitHub issue:
+       - Focus on user-visible symptoms and impact
+       - Describe what's broken from a user perspective
+       - Avoid implementation details or technical jargon
+       - Be concise but clear about the problem
+
+    4. **Test Design Strategy**: The unittest should:
+       - Cover the main functionality comprehensively
+       - Include specific test cases that will catch the introduced bug
+       - Test edge cases and boundary conditions
+       - Validate both successful operations and error handling
+       - Use meaningful assertions that clearly indicate what went wrong
+
+    ## Important Notes:
+    - All code must be wrapped in ```python blocks for proper syntax highlighting
+    - Follow the exact delimiters (===SECTION_START===, ===SECTION_END===) for parsing
+    - The bug must be introduced to the Target Code, not the example codes
+    - Focus on creating sophisticated bugs that challenge debugging skills rather than obvious errors
+    - The unittest should be production-quality with proper structure, documentation, and coverage
+    - Ensure the unittest is self-contained and can be run independently
+    - The bug should be subtle enough that it might pass casual inspection but will be caught by thorough testing

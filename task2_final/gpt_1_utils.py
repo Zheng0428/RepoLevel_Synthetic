@@ -63,11 +63,18 @@ class BugFile:
     code: str
 
 @dataclass
+class UnittestFile:
+    """表示一个unittest文件"""
+    file_path: str
+    code: str
+
+@dataclass
 class ParsedBugResponse:
     """解析后的bug响应结构"""
     problem_statement: str
     bug_analysis: str
     buggy_files: List[BugFile]
+    unittest_file: Optional[UnittestFile]  # 新增unittest文件字段
 
 # ================== Text Processing Functions ==================
 
@@ -102,11 +109,16 @@ def parse_bug_response(response: str) -> Optional[ParsedBugResponse]:
         buggy_files = _extract_buggy_files(response)
         if not buggy_files:
             return None
+
+        # 解析unittest文件
+        unittest_file = _extract_unittest_file(response)
+        # unittest_file 可以为 None，因为并非所有响应都包含unittest
             
         return ParsedBugResponse(
             problem_statement=problem_statement,
             bug_analysis=bug_analysis,
-            buggy_files=buggy_files
+            buggy_files=buggy_files,
+            unittest_file=unittest_file
         )
         
     except Exception as e:
@@ -178,6 +190,41 @@ def _parse_single_file(file_content: str) -> Optional[BugFile]:
     except Exception:
         return None
 
+def _extract_unittest_file(response: str) -> Optional[UnittestFile]:
+    """提取unittest文件的信息"""
+    # 提取UNITTEST_FILE部分
+    unittest_section = _extract_section(response, "UNITTEST_FILE")
+    if not unittest_section:
+        return None
+    
+    try:
+        # 提取文件路径
+        path_match = re.search(r"FILE_PATH:\s*(.+)", unittest_section)
+        if not path_match:
+            return None
+        file_path = path_match.group(1).strip()
+        
+        # 提取代码内容
+        code_pattern = r"===CODE_START===(.*?)===CODE_END==="
+        code_match = re.search(code_pattern, unittest_section, re.DOTALL)
+        if not code_match:
+            return None
+            
+        code_content = code_match.group(1).strip()
+        
+        # 去除python代码块标记
+        if code_content.startswith("```python"):
+            code_content = code_content[9:]  # 去除```python
+        if code_content.endswith("```"):
+            code_content = code_content[:-3]  # 去除```
+            
+        code_content = code_content.strip()
+        
+        return UnittestFile(file_path=file_path, code=code_content)
+        
+    except Exception:
+        return None
+
 # ================== Patch Generation Functions ==================
 
 def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse, default_path: str) -> dict:
@@ -190,7 +237,7 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse, default
         default_path: 默认路径
         
     Returns:
-        dict: 包含gpt_patch的数据
+        dict: 包含gpt_patch和test_patch的数据
     """
     # 获取基本信息
     repo_name = data.get('repo', '').replace('/', '__') + '__' + data.get('base_commit', '')[:6]
@@ -206,8 +253,11 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse, default
     # 获取GPT生成的bug文件路径
     gpt_bug_files = [bug_file.file_path for bug_file in result.buggy_files]
     
-    # 合并需要复制的文件
-    files_to_copy = gpt_bug_files
+    # 如果有unittest文件，也需要包含在复制列表中
+    files_to_copy = gpt_bug_files.copy()
+    if result.unittest_file:
+        files_to_copy.append(result.unittest_file.file_path)
+    
     try:
         with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
             temp_dir = temp_testbed.temp_dir
@@ -240,7 +290,6 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse, default
                     files_exist_list.append(os.path.exists(bug_file_full_path))
                 
                 # 生成从bug到fix的patch (bug->fix)
-                # 如果所有文件都存在，则files_exist=True，否则False
                 all_files_exist = all(files_exist_list)
                 gpt_patch = fake_git_repo(
                     file_pathes=bug_file_paths,
@@ -256,11 +305,37 @@ def generate_patches_for_bug_data(data: dict, result: ParsedBugResponse, default
                     files_exist=all_files_exist
                 )
                 
+                # 生成test patch（如果有unittest文件）
+                test_patch = ""
+                if result.unittest_file:
+                    unittest_file_path = os.path.join(temp_dir, result.unittest_file.file_path)
+                    unittest_exists = os.path.exists(unittest_file_path)
+                    
+                    # 读取现有的unittest文件内容（如果存在）
+                    existing_unittest_content = ""
+                    if unittest_exists:
+                        with open(unittest_file_path, 'r', encoding='utf-8') as f:
+                            existing_unittest_content = f.read()
+                    
+                    # 生成test patch（添加或修改unittest文件）
+                    test_patch = fake_git_repo(
+                        file_pathes=[result.unittest_file.file_path],
+                        old_contents=[existing_unittest_content],
+                        new_contents=[result.unittest_file.code],
+                        files_exist=unittest_exists
+                    )
+                
                 # 更新数据
                 data['gpt_patch'] = gpt_patch
                 data['gpt_reverse_patch'] = gpt_reverse_patch
+                data['test_patch'] = test_patch  # 新增test_patch字段
                 data['gpt_problem_statement'] = result.problem_statement
                 data['gpt_bug_analysis'] = result.bug_analysis
+                
+                # 保存unittest文件信息（可选）
+                if result.unittest_file:
+                    data['unittest_file_path'] = result.unittest_file.file_path
+                    data['unittest_file_code'] = result.unittest_file.code
                 
             finally:
                 # 清理临时patch文件

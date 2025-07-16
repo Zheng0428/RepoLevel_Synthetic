@@ -706,7 +706,7 @@ if __name__ == "__main__":
         
     else:
         # Normal initialization
-        tasks_to_process = initial_tasks[:4]
+        tasks_to_process = initial_tasks[:5]
         all_perfect_results = {}
         all_perfect_tasks = []
         processed_ids = set()

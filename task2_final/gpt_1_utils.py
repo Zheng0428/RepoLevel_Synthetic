@@ -545,7 +545,7 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
 def origin_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     return task_item['prompt']
 
-def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
+def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list, template_path: str) -> str:
     """
     Reconstructs a three-shot prompt based on task items, repository paths, and sample data.
     This mirrors the logic used in data_loader.py for the 'three_shot_same_test' mode.
@@ -562,7 +562,7 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
         # logger.info(f"Starting prompt reconstruction for task {task_item.get('instance_id', 'unknown')}")
         
         # Load the template for three-shot mode
-        template = read_yaml("yimi/three_shot_same_test")
+        template = read_yaml(template_path)
         if not template or 'prompt_template' not in template:
             logger.error("Template not found or invalid for three_shot_same_test mode")
             return ""
@@ -659,44 +659,43 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
                     file_content = f.read()
                     original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
         
-        # Get unittest code
-        unittest_code = ''
-        test_files = task_item.get('test_files', [])  # Assuming test files are specified
+        # # Get unittest code
+        # unittest_code = ''
+        # test_files = task_item.get('test_files', [])  # Assuming test files are specified
         
-        for test_file_name in test_files:
-            full_file_path = os.path.join(source_testbed, test_file_name)
-            if os.path.exists(full_file_path):
-                with open(full_file_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                    unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        # for test_file_name in test_files:
+        #     full_file_path = os.path.join(source_testbed, test_file_name)
+        #     if os.path.exists(full_file_path):
+        #         with open(full_file_path, 'r', encoding='utf-8') as f:
+        #             file_content = f.read()
+        #             unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
         
-        if not original_code:
-            logger.warning("Missing original code")
-            return ""
+        # if not original_code:
+        #     logger.warning("Missing original code")
+        #     return ""
         
-        # If no specific test files, try to find test files in the repository
-        if not unittest_code:
-            try:
-                for root, dirs, files in os.walk(source_testbed):
-                    for file in files:
-                        if file.endswith('.py') and ('test' in file.lower() or file.startswith('test_')):
-                            test_file_path = os.path.join(root, file)
-                            relative_path = os.path.relpath(test_file_path, source_testbed)
-                            with open(test_file_path, 'r', encoding='utf-8') as f:
-                                file_content = f.read()
-                                unittest_code += f"File Name: {relative_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-                            break  # Use only the first test file found
-            except Exception as e:
-                logger.warning(f"Error finding test files: {e}")
+        # # If no specific test files, try to find test files in the repository
+        # if not unittest_code:
+        #     try:
+        #         for root, dirs, files in os.walk(source_testbed):
+        #             for file in files:
+        #                 if file.endswith('.py') and ('test' in file.lower() or file.startswith('test_')):
+        #                     test_file_path = os.path.join(root, file)
+        #                     relative_path = os.path.relpath(test_file_path, source_testbed)
+        #                     with open(test_file_path, 'r', encoding='utf-8') as f:
+        #                         file_content = f.read()
+        #                         unittest_code += f"File Name: {relative_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        #                     break  # Use only the first test file found
+        #     except Exception as e:
+        #         logger.warning(f"Error finding test files: {e}")
         
-        if not unittest_code:
-            logger.warning("No unittest code found, using empty string")
-            unittest_code = "# No test files found"
+        # if not unittest_code:
+        #     logger.warning("No unittest code found, using empty string")
+        #     unittest_code = "# No test files found"
         
         # Build final prompt using template
         prompt = template['prompt_template'].format(
             original_code=original_code,
-            unittest_code=unittest_code,
             example_problem_statement_1=example_problem_statement_1,
             example_buggy_files_1=example_buggy_files_1,
             example_problem_statement_2=selected_examples[0]['problem_statement'],

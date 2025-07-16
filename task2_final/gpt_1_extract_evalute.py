@@ -618,7 +618,8 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
         reconstructed_prompt = reconstruct_three_shot_prompt(
             task_item=task,
             repo_path=repo_path,
-            sample_data=all_perfect_tasks
+            sample_data=all_perfect_tasks,
+            template_path="yimi/three_shot"
         )
         
         if reconstructed_prompt and reconstructed_prompt.strip():
@@ -705,7 +706,7 @@ if __name__ == "__main__":
         
     else:
         # Normal initialization
-        tasks_to_process = initial_tasks
+        tasks_to_process = initial_tasks[:4]
         all_perfect_results = {}
         all_perfect_tasks = []
         processed_ids = set()

@@ -9,8 +9,10 @@ import tempfile
 import random
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
-from utils import fake_git_repo
+from utils import fake_git_repo, get_llm_response
 import tiktoken, yaml
 
 
@@ -495,6 +497,300 @@ def make_test_command_for_gpt(instance, env_dir, tmp_dir, test_patch, non_test_e
     test_command = " ".join([test_cmd, *directives])  
     return test_command
 
+# ================== Evaluation Functions ==================
+
+def create_temp_patch_file(patch_content: str, base_path: str, instance_id: str, patch_type: str) -> str:
+    """
+    创建临时patch文件
+    
+    Args:
+        patch_content: patch内容
+        base_path: 基础路径
+        instance_id: 实例ID
+        patch_type: patch类型（用于文件名）
+        
+    Returns:
+        str: patch文件的完整路径
+    """
+    patch_path = f"{base_path}/{patch_type}-eval/{instance_id}/{patch_type}_patch.diff"
+    os.makedirs(os.path.dirname(patch_path), exist_ok=True)
+    
+    with open(patch_path, 'w') as f:
+        f.write(patch_content)
+    
+    return patch_path
+
+def get_repo_commit_name(repo: str, base_commit: str) -> str:
+    """获取repo commit名称"""
+    return repo.replace("/", "__") + "__" + base_commit[:6]
+
+def merge_files_to_copy(patch_files_list: List[Dict[str, List[str]]]) -> List[str]:
+    """
+    合并多个patch文件列表
+    
+    Args:
+        patch_files_list: patch文件列表的列表
+        
+    Returns:
+        List[str]: 合并后的文件列表
+    """
+    all_files = []
+    for patch_files in patch_files_list:
+        all_files.extend(patch_files.get("modified", []))
+        all_files.extend(patch_files.get("added", []))
+    
+    return list(set(all_files))
+
+def create_error_report(instance_id: str, error_msg: str, timed_out: bool = False, duration: float = 0) -> dict:
+    """
+    创建错误报告
+    
+    Args:
+        instance_id: 实例ID
+        error_msg: 错误消息
+        timed_out: 是否超时
+        duration: 持续时间
+        
+    Returns:
+        dict: 错误报告
+    """
+    return {
+        instance_id: {
+            "success": False,
+            "error": error_msg,
+            "timed_out": timed_out,
+            "duration": duration
+        }
+    }
+
+def run_parallel_tasks(tasks: List[Dict], log_path: str, exec_func, max_workers: int = 4, timeout: int = 100) -> Dict:
+    """
+    并行运行多个任务的通用函数
+    
+    Args:
+        tasks: 任务列表
+        log_path: 日志路径
+        exec_func: 执行函数
+        max_workers: 最大工作线程数
+        timeout: 超时时间
+        
+    Returns:
+        Dict: 执行结果字典
+    """
+    results = {}
+    complete_tasks = 0
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(exec_func, task, log_path, timeout): task
+            for task in tasks
+        }
+        
+        for future in as_completed(future_to_task):
+            result = future.result()
+            instance_id = list(result.keys())[0]
+            result_value = result[instance_id]
+            
+            # 合并测试状态（如果实例已存在）
+            if instance_id in results:
+                if 'tests_status' in result_value and 'tests_status' in results[instance_id]:
+                    results[instance_id]['tests_status']['PASSED'].extend(
+                        result_value['tests_status']['PASSED']
+                    )
+                    results[instance_id]['tests_status']['FAILED'].extend(
+                        result_value['tests_status']['FAILED']
+                    )
+            else:
+                results.update(result)
+                
+            complete_tasks += 1
+            status = "SUCCESS" if result_value["success"] else "FAILED"
+            logger.info(
+                f"Progress: {complete_tasks}/{len(tasks)} - "
+                f"Task {instance_id} {status} - "
+                f"Duration: {result_value['duration']:.2f}s"
+            )
+    
+    return results
+
+def save_evaluation_results(results: Dict, results_path: str, eval_type: str):
+    """
+    保存评估结果
+    
+    Args:
+        results: 结果字典
+        results_path: 结果文件路径
+        eval_type: 评估类型（用于日志）
+    """
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=4)
+    
+    logger.info(f"{eval_type} evaluation results saved to {results_path}")
+
+def retry_unittest_generation_for_task(task: dict, repo_path: str) -> Optional[dict]:
+    """
+    为单个任务重新生成unittest和buggy code
+    
+    Args:
+        task: 原始任务数据
+        repo_path: repo路径
+        
+    Returns:
+        Optional[dict]: 更新后的任务数据，失败时返回None
+    """
+    try:
+        instance_id = task.get('instance_id', 'unknown')
+        logger.info(f"Retrying unittest generation for task {instance_id}")
+        
+        # 构建重试prompt
+        repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
+        source_testbed = os.path.join(repo_path, repo_name)
+        
+        if not os.path.exists(source_testbed):
+            logger.warning(f"Source testbed not found: {source_testbed}")
+            return None
+        
+        # 读取原始代码
+        original_code = ''
+        input_files = task.get('input_files', [])
+        noise_files = task.get('noise_files', [])
+        
+        for file_path in input_files + noise_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        
+        if not original_code:
+            logger.warning(f"No original code found for task {instance_id}")
+            return None
+        
+        # 构建重试prompt
+        retry_template = read_yaml('unittest_retry')
+        if not retry_template or 'prompt_template' not in retry_template:
+            logger.error("unittest_retry template not found")
+            return None
+        
+        problem_statement = task.get('gpt_problem_statement', '')
+        if not problem_statement:
+            logger.warning(f"No problem statement found for task {instance_id}")
+            return None
+        
+        retry_prompt = retry_template['prompt_template'].format(
+            original_code=original_code,
+            problem_statement=problem_statement
+        )
+        
+        # 获取新的LLM响应
+        new_response = get_llm_response(retry_prompt)
+        if 'API request failed' in new_response:
+            logger.warning(f"API request failed for retry of task {instance_id}")
+            return None
+        
+        # 解析新响应
+        result = parse_bug_response(new_response)
+        if not result:
+            logger.warning(f"Failed to parse retry response for task {instance_id}")
+            return None
+        
+        # 生成新的patches
+        task_copy = task.copy()
+        task_copy['response'] = new_response  # 更新response
+        processed_data = generate_patches_for_bug_data(task_copy, result, repo_path)
+        
+        logger.info(f"Successfully retried unittest generation for task {instance_id}")
+        return processed_data
+        
+    except Exception as e:
+        logger.error(f"Error in retry_unittest_generation for task {task.get('instance_id', 'unknown')}: {e}")
+        return None
+
+def retry_tasks_in_parallel(tasks_need_retry: List[dict], repo_path: str) -> List[dict]:
+    """
+    并行重试多个任务
+    
+    Args:
+        tasks_need_retry: 需要重试的任务列表
+        repo_path: repo路径
+        
+    Returns:
+        List[dict]: 重试后的任务列表
+    """
+    retried_tasks = []
+    max_workers = min(2, len(tasks_need_retry))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(retry_unittest_generation_for_task, task, repo_path): task
+            for task in tasks_need_retry
+        }
+        
+        desc = "Retrying unittest generation"
+        with tqdm(total=len(tasks_need_retry), desc=desc, unit="task") as pbar:
+            for future in as_completed(future_to_task):
+                try:
+                    retried_task = future.result()
+                    if retried_task:
+                        retried_tasks.append(retried_task)
+                        logger.info(f"Successfully retried task {retried_task.get('instance_id', 'unknown')}")
+                    else:
+                        # 如果重试失败，保留原任务
+                        original_task = future_to_task[future]
+                        retried_tasks.append(original_task)
+                        logger.warning(f"Retry failed for task {original_task.get('instance_id', 'unknown')}, keeping original")
+                except Exception as e:
+                    original_task = future_to_task[future]
+                    logger.error(f"Error retrying task {original_task.get('instance_id', 'unknown')}: {e}")
+                    retried_tasks.append(original_task)
+                finally:
+                    pbar.update(1)
+    
+    return retried_tasks
+
+def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list, all_tasks: list, repo_path: str) -> dict:
+    """
+    Attempts to reconstruct the prompt for a task using the new function.
+    If successful, uses the reconstructed prompt to get a new response.
+    Otherwise, falls back to the original method.
+    """
+    try:
+        # Attempt to reconstruct the prompt
+        # logger.info(f"Attempting prompt reconstruction for task {task.get('instance_id', 'unknown')}")
+        
+        # Use the new reconstruction function
+        if len(all_perfect_tasks) < 3:
+            all_perfect_tasks = all_tasks
+        reconstructed_prompt = reconstruct_three_shot_prompt(
+            task_item=task,
+            repo_path=repo_path,
+            sample_data=all_perfect_tasks,
+            template_path="yimi/three_shot"
+        )
+        
+        if reconstructed_prompt and reconstructed_prompt.strip():
+            # logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
+            
+            # Get a new response using the reconstructed prompt
+            new_response = get_llm_response(reconstructed_prompt)
+            if 'API request failed' in new_response:
+                logger.warning(f"API request failed for task {task.get('instance_id', 'unknown')}, using original")
+                return task
+            # Update the task with the new prompt and response
+            task_copy = task.copy()
+            task_copy['messages'] = [{"role": "user", "content": reconstructed_prompt}]
+            task_copy['response'] = new_response
+            
+            # logger.info(f"Generated new response for task {task.get('instance_id', 'unknown')}")
+            return task_copy
+        else:
+            logger.warning(f"Prompt reconstruction returned empty for task {task.get('instance_id', 'unknown')}, using original")
+            return task
+            
+    except Exception as e:
+        logger.error(f"Failed to reconstruct prompt for task {task.get('instance_id', 'unknown')}: {e}")
+        return task
+
 # ================== File I/O Functions ==================
 
 def save_checkpoint_state(checkpoint_data: dict, checkpoint_file: str):
@@ -733,40 +1029,6 @@ def reconstruct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: 
                 with open(full_file_path, 'r', encoding='utf-8') as f:
                     file_content = f.read()
                     original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-        
-        # # Get unittest code
-        # unittest_code = ''
-        # test_files = task_item.get('test_files', [])  # Assuming test files are specified
-        
-        # for test_file_name in test_files:
-        #     full_file_path = os.path.join(source_testbed, test_file_name)
-        #     if os.path.exists(full_file_path):
-        #         with open(full_file_path, 'r', encoding='utf-8') as f:
-        #             file_content = f.read()
-        #             unittest_code += f"File Name: {test_file_name}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-        
-        # if not original_code:
-        #     logger.warning("Missing original code")
-        #     return ""
-        
-        # # If no specific test files, try to find test files in the repository
-        # if not unittest_code:
-        #     try:
-        #         for root, dirs, files in os.walk(source_testbed):
-        #             for file in files:
-        #                 if file.endswith('.py') and ('test' in file.lower() or file.startswith('test_')):
-        #                     test_file_path = os.path.join(root, file)
-        #                     relative_path = os.path.relpath(test_file_path, source_testbed)
-        #                     with open(test_file_path, 'r', encoding='utf-8') as f:
-        #                         file_content = f.read()
-        #                         unittest_code += f"File Name: {relative_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-        #                     break  # Use only the first test file found
-        #     except Exception as e:
-        #         logger.warning(f"Error finding test files: {e}")
-        
-        # if not unittest_code:
-        #     logger.warning("No unittest code found, using empty string")
-        #     unittest_code = "# No test files found"
         
         # Build final prompt using template
         prompt = template['prompt_template'].format(

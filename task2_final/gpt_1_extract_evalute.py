@@ -26,10 +26,14 @@ from gpt_1_utils import (
     load_processed_ids_from_output, load_perfect_tasks_from_output,
     append_results_to_jsonl,
     # Prompt reconstruction
-    reconstruct_three_shot_prompt,
+    reconstruct_three_shot_prompt, process_single_task_with_reconstruction,
     origin_prompt,
+    # Evaluation utilities
+    create_temp_patch_file, get_repo_commit_name, merge_files_to_copy,
+    create_error_report, run_parallel_tasks, save_evaluation_results,
+    retry_unittest_generation_for_task, retry_tasks_in_parallel,
     # Constants
-    NON_TEST_EXTS
+    NON_TEST_EXTS, read_yaml
 )
 
 # Configure logging
@@ -53,7 +57,7 @@ def test_init(tasks, max_workers, timeout):
     os.makedirs(log_path, exist_ok=True)
     
     start_time = time.time()
-    results = eval_parallel_init_tasks(tasks, log_path, max_workers=max_workers, timeout=timeout)
+    results = run_parallel_tasks(tasks, log_path, eval_init_instance, max_workers=max_workers, timeout=timeout)
     total_time = time.time() - start_time
     
     logger.info("\nInit State Evaluation Summary:")
@@ -61,50 +65,9 @@ def test_init(tasks, max_workers, timeout):
     if results:
         logger.info(f"Average task time: {total_time/len(results):.2f}s")
     
-    # 直接保存所有结果，不进行分类
+    # 保存所有结果
     init_results_path = f"{EXP_PATH}/init_all_results.json"
-    with open(init_results_path, "w") as f:
-        json.dump(results, f, indent=4)
-    
-    logger.info(f"Init evaluation results saved to {init_results_path}")
-    return results
-
-def eval_parallel_init_tasks(tasks: List[Dict], log_path, max_workers: int = 4, timeout=100) -> List[Dict]:
-    """并行运行多个初始状态评估任务"""
-    results = {}
-    complete_tasks = 0
-    exec_func = eval_init_instance
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_task = {
-            executor.submit(exec_func, task, log_path, timeout): task
-            for task in tasks
-        }
-        
-        for future in as_completed(future_to_task):
-            result = future.result()
-            instance_id = list(result.keys())[0]
-            result_value = result[instance_id]
-            
-            # 合并测试状态（如果实例已存在）
-            if instance_id in results:
-                if 'tests_status' in result_value and 'tests_status' in results[instance_id]:
-                    results[instance_id]['tests_status']['PASSED'].extend(
-                        result_value['tests_status']['PASSED']
-                    )
-                    results[instance_id]['tests_status']['FAILED'].extend(
-                        result_value['tests_status']['FAILED']
-                    )
-            else:
-                results.update(result)
-                
-            complete_tasks += 1
-            status = "SUCCESS" if result_value["success"] else "FAILED"
-            logger.info(
-                f"Progress: {complete_tasks}/{len(tasks)} - "
-                f"Task {instance_id} {status} - "
-                f"Duration: {result_value['duration']:.2f}s"
-            )
+    save_evaluation_results(results, init_results_path, "Init")
     
     return results
 
@@ -116,42 +79,27 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     instance_id = instance['instance_id']
     repo = instance['repo']
     base_commit = instance['base_commit']
-    repo_commit = repo.replace("/", "__") + "__" + base_commit[:6]
+    repo_commit = get_repo_commit_name(repo, base_commit)
     
     # 获取patches
     original_patch = instance.get('patch', '')  # 原始修复patch
     test_patch = instance.get('test_patch', '')  # GPT生成的测试patch
     
-    # 创建临时patch文件路径
-    init_test_patch_path = f"{GENERATE_DATA_PATH}/init-eval/{instance_id}/test_patch.diff"
-    
-    # 创建目录
-    os.makedirs(os.path.dirname(init_test_patch_path), exist_ok=True)
-    
-    # 写入patch文件
-    with open(init_test_patch_path, 'w') as f:
-        f.write(test_patch)
+    # 创建临时patch文件
+    init_test_patch_path = create_temp_patch_file(test_patch, GENERATE_DATA_PATH, instance_id, "init")
     
     # 获取需要复制的文件
     original_patch_files = get_all_filenames(original_patch)
     test_files = get_all_filenames(test_patch)
-    
-    # 合并所有需要的文件
-    files_to_copy = list(set(
-        original_patch_files["modified"] + 
-        original_patch_files["added"] +
-        test_files["modified"] + 
-        test_files["added"]
-    ))
+    files_to_copy = merge_files_to_copy([original_patch_files, test_files])
     
     source_testbed = os.path.join(DEFAULT_PATH, repo_commit)
     conda_path = os.path.join(ENV_DIR, repo_commit)
-
     eval_sh = "./eval.sh"
     
     # 检查脚本是否存在
     if not os.path.exists(eval_sh):
-        raise FileNotFoundError(f"Evaluation script not found: {eval_sh}")
+        return create_error_report(instance_id, f"Evaluation script not found: {eval_sh}")
     
     try:
         with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
@@ -182,14 +130,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
                 report[instance_id]["success"] = success
                 
             except Exception as e:
-                report = {
-                    instance_id: {
-                        "success": False,
-                        "error": str(e),
-                        "timed_out": False,
-                        "duration": 0
-                    }
-                }
+                report = create_error_report(instance_id, str(e))
                     
             end_time = time.time()
             duration = end_time - start_time
@@ -197,14 +138,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
             
     except Exception as e:
         logger.error(f"Error evaluating init instance {instance_id}: {str(e)}")
-        report = {
-            instance_id: {
-                "success": False,
-                "error": str(e),
-                "timed_out": False,
-                "duration": 0
-            }
-        }
+        report = create_error_report(instance_id, str(e))
     
     return report
 
@@ -214,7 +148,7 @@ def test_gpt_bug(tasks, max_workers, timeout):
     os.makedirs(log_path, exist_ok=True)
     
     start_time = time.time()
-    results = eval_parallel_gpt_bug_tasks(tasks, log_path, max_workers=max_workers, timeout=timeout)
+    results = run_parallel_tasks(tasks, log_path, eval_gpt_bug_instance, max_workers=max_workers, timeout=timeout)
     total_time = time.time() - start_time
     
     logger.info("\nGPT Bug Evaluation Summary:")
@@ -222,50 +156,9 @@ def test_gpt_bug(tasks, max_workers, timeout):
     if results:
         logger.info(f"Average task time: {total_time/len(results):.2f}s")
     
-    # 直接保存所有结果，不进行分类
+    # 保存所有结果
     gpt_bug_results_path = f"{EXP_PATH}/gpt_bug_all_results.json"
-    with open(gpt_bug_results_path, "w") as f:
-        json.dump(results, f, indent=4)
-    
-    logger.info(f"GPT bug evaluation results saved to {gpt_bug_results_path}")
-    return results
-
-def eval_parallel_gpt_bug_tasks(tasks: List[Dict], log_path, max_workers: int = 4, timeout=100) -> List[Dict]:
-    """并行运行多个GPT bug评估任务"""
-    results = {}
-    complete_tasks = 0
-    exec_func = eval_gpt_bug_instance
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_task = {
-            executor.submit(exec_func, task, log_path, timeout): task
-            for task in tasks
-        }
-        
-        for future in as_completed(future_to_task):
-            result = future.result()
-            instance_id = list(result.keys())[0]
-            result_value = result[instance_id]
-            
-            # 合并测试状态（如果实例已存在）
-            if instance_id in results:
-                if 'tests_status' in result_value and 'tests_status' in results[instance_id]:
-                    results[instance_id]['tests_status']['PASSED'].extend(
-                        result_value['tests_status']['PASSED']
-                    )
-                    results[instance_id]['tests_status']['FAILED'].extend(
-                        result_value['tests_status']['FAILED']
-                    )
-            else:
-                results.update(result)
-                
-            complete_tasks += 1
-            status = "SUCCESS" if result_value["success"] else "FAILED"
-            logger.info(
-                f"Progress: {complete_tasks}/{len(tasks)} - "
-                f"Task {instance_id} {status} - "
-                f"Duration: {result_value['duration']:.2f}s"
-            )
+    save_evaluation_results(results, gpt_bug_results_path, "GPT bug")
     
     return results
 
@@ -274,50 +167,29 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     instance_id = instance['instance_id']
     repo = instance['repo']
     base_commit = instance['base_commit']
-    repo_commit = repo.replace("/", "__") + "__" + base_commit[:6]
+    repo_commit = get_repo_commit_name(repo, base_commit)
     
     # 获取GPT生成的patches
     gpt_patch = instance.get('gpt_patch', '')  # GPT生成的bug patch
     
     if not gpt_patch:
-        return {
-            instance_id: {
-                "success": False,
-                "error": "Missing gpt_patch",
-                "timed_out": False,
-                "duration": 0
-            }
-        }
+        return create_error_report(instance_id, "Missing gpt_patch")
     
-    # 创建临时patch文件路径
-    gpt_bug_patch_path = f"{GENERATE_DATA_PATH}/gpt-bug-eval/{instance_id}/gpt_bug_patch.diff"
-    init_test_patch_path = f"{GENERATE_DATA_PATH}/gpt-init-eval/{instance_id}/test_patch.diff"
-    
-    # 创建目录
-    os.makedirs(os.path.dirname(gpt_bug_patch_path), exist_ok=True)
-    
-    # 写入patch文件
-    with open(gpt_bug_patch_path, 'w') as f:
-        f.write(gpt_patch)
+    # 创建临时patch文件
+    gpt_bug_patch_path = create_temp_patch_file(gpt_patch, GENERATE_DATA_PATH, instance_id, "gpt-bug")
+    init_test_patch_path = create_temp_patch_file(instance['test_patch'], GENERATE_DATA_PATH, instance_id, "gpt-init")
     
     # 获取需要复制的文件
     gpt_patch_files = get_all_filenames(gpt_patch)
-    
-    # 合并所有需要的文件
-    files_to_copy = list(set(
-        gpt_patch_files["modified"] + 
-        gpt_patch_files["added"]
-    ))
+    files_to_copy = merge_files_to_copy([gpt_patch_files])
     
     source_testbed = os.path.join(DEFAULT_PATH, repo_commit)
     conda_path = os.path.join(ENV_DIR, repo_commit)
-    
-    # 使用现有的eval.sh脚本
     eval_sh = "./eval.sh"
     
     # 检查脚本是否存在
     if not os.path.exists(eval_sh):
-        raise FileNotFoundError(f"Evaluation script not found: {eval_sh}")
+        return create_error_report(instance_id, f"Evaluation script not found: {eval_sh}")
     
     try:
         with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
@@ -336,14 +208,7 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
             patch_cmd_2 = f'cd {temp_dir} && git apply --reverse --whitespace=nowarn {gpt_bug_patch_path}'
             result_2 = subprocess.run(patch_cmd_2, shell=True, capture_output=True, text=True)
             if result_2.returncode != 0:
-                return {
-                    instance_id: {
-                        "success": False,
-                        "error": f"Failed to apply GPT bug patch: {result_2.stderr}",
-                        "timed_out": False,
-                        "duration": 0
-                    }
-                }
+                return create_error_report(instance_id, f"Failed to apply GPT bug patch: {result_2.stderr}")
 
             # 运行测试
             cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {init_test_patch_path}'
@@ -361,14 +226,7 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
                 report[instance_id]["success"] = success
                 
             except Exception as e:
-                report = {
-                    instance_id: {
-                        "success": False,
-                        "error": str(e),
-                        "timed_out": False,
-                        "duration": 0
-                    }
-                }
+                report = create_error_report(instance_id, str(e))
                     
             end_time = time.time()
             duration = end_time - start_time
@@ -376,14 +234,7 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
             
     except Exception as e:
         logger.error(f"Error evaluating GPT bug instance {instance_id}: {str(e)}")
-        report = {
-            instance_id: {
-                "success": False,
-                "error": str(e),
-                "timed_out": False,
-                "duration": 0
-            }
-        }
+        report = create_error_report(instance_id, str(e))
     
     return report
 
@@ -571,85 +422,6 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     logger.info(f"Extraction phase summary: {len(extracted_tasks)} succeeded, {len(failed_ids)} failed parsing.")
     return extracted_tasks, failed_ids
 
-def retry_unittest_generation(task: dict, repo_path: str) -> Optional[dict]:
-    """
-    为单个任务重新生成unittest和buggy code
-    
-    Args:
-        task: 原始任务数据
-        repo_path: repo路径
-        
-    Returns:
-        Optional[dict]: 更新后的任务数据，失败时返回None
-    """
-    try:
-        instance_id = task.get('instance_id', 'unknown')
-        logger.info(f"Retrying unittest generation for task {instance_id}")
-        
-        # 构建重试prompt
-        repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
-        source_testbed = os.path.join(DEFAULT_PATH, repo_name)
-        
-        if not os.path.exists(source_testbed):
-            logger.warning(f"Source testbed not found: {source_testbed}")
-            return None
-        
-        # 读取原始代码
-        original_code = ''
-        input_files = task.get('input_files', [])
-        noise_files = task.get('noise_files', [])
-        
-        for file_path in input_files + noise_files:
-            full_file_path = os.path.join(source_testbed, file_path)
-            if os.path.exists(full_file_path):
-                with open(full_file_path, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                    original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-        
-        if not original_code:
-            logger.warning(f"No original code found for task {instance_id}")
-            return None
-        
-        # 构建重试prompt
-        retry_template = read_yaml('unittest_retry')
-        if not retry_template or 'prompt_template' not in retry_template:
-            logger.error("unittest_retry template not found")
-            return None
-        
-        problem_statement = task.get('gpt_problem_statement', '')
-        if not problem_statement:
-            logger.warning(f"No problem statement found for task {instance_id}")
-            return None
-        
-        retry_prompt = retry_template['prompt_template'].format(
-            original_code=original_code,
-            problem_statement=problem_statement
-        )
-        
-        # 获取新的LLM响应
-        new_response = get_llm_response(retry_prompt)
-        if 'API request failed' in new_response:
-            logger.warning(f"API request failed for retry of task {instance_id}")
-            return None
-        
-        # 解析新响应
-        result = parse_bug_response(new_response)
-        if not result:
-            logger.warning(f"Failed to parse retry response for task {instance_id}")
-            return None
-        
-        # 生成新的patches
-        task_copy = task.copy()
-        task_copy['response'] = new_response  # 更新response
-        processed_data = generate_patches_for_bug_data(task_copy, result, DEFAULT_PATH)
-        
-        logger.info(f"Successfully retried unittest generation for task {instance_id}")
-        return processed_data
-        
-    except Exception as e:
-        logger.error(f"Error in retry_unittest_generation for task {task.get('instance_id', 'unknown')}: {e}")
-        return None
-
 def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_results: dict) -> List[dict]:
     """
     检查init测试结果，对PASSED cases < 5的任务进行重试
@@ -687,55 +459,13 @@ def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_resul
     
     if tasks_need_retry:
         logger.info(f"Retrying {len(tasks_need_retry)} tasks with insufficient test coverage...")
-        retried_tasks = retry_tasks_in_parallel(tasks_need_retry)
+        retried_tasks = retry_tasks_in_parallel(tasks_need_retry, DEFAULT_PATH)
         final_tasks.extend(retried_tasks)
         logger.info(f"Retry phase completed. Total tasks: {len(final_tasks)}")
     else:
         logger.info("All tasks have sufficient test coverage, no retry needed")
     
     return final_tasks
-
-def retry_tasks_in_parallel(tasks_need_retry: List[dict]) -> List[dict]:
-    """
-    并行重试多个任务
-    
-    Args:
-        tasks_need_retry: 需要重试的任务列表
-        
-    Returns:
-        List[dict]: 重试后的任务列表
-    """
-    retried_tasks = []
-    max_workers = min(2, len(tasks_need_retry))
-    
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_task = {
-            executor.submit(retry_unittest_generation, task, DEFAULT_PATH): task
-            for task in tasks_need_retry
-        }
-        
-        desc = "Retrying unittest generation"
-        with tqdm(total=len(tasks_need_retry), desc=desc, unit="task") as pbar:
-            for future in as_completed(future_to_task):
-                try:
-                    retried_task = future.result()
-                    if retried_task:
-                        retried_tasks.append(retried_task)
-                        logger.info(f"Successfully retried task {retried_task.get('instance_id', 'unknown')}")
-                    else:
-                        # 如果重试失败，保留原任务
-                        original_task = future_to_task[future]
-                        retried_tasks.append(original_task)
-                        logger.warning(f"Retry failed for task {original_task.get('instance_id', 'unknown')}, keeping original")
-                except Exception as e:
-                    original_task = future_to_task[future]
-                    logger.error(f"Error retrying task {original_task.get('instance_id', 'unknown')}: {e}")
-                    retried_tasks.append(original_task)
-                finally:
-                    pbar.update(1)
-    
-    return retried_tasks
-
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     """
@@ -774,49 +504,6 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     analysis_results = analyze_combined_results(final_init_results, gpt_bug_results)
     
     return analysis_results
-
-def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list, all_tasks: list, repo_path: str) -> dict:
-    """
-    Attempts to reconstruct the prompt for a task using the new function.
-    If successful, uses the reconstructed prompt to get a new response.
-    Otherwise, falls back to the original method.
-    """
-    try:
-        # Attempt to reconstruct the prompt
-        # logger.info(f"Attempting prompt reconstruction for task {task.get('instance_id', 'unknown')}")
-        
-        # Use the new reconstruction function
-        if len(all_perfect_tasks) < 3:
-            all_perfect_tasks = all_tasks
-        reconstructed_prompt = reconstruct_three_shot_prompt(
-            task_item=task,
-            repo_path=repo_path,
-            sample_data=all_perfect_tasks,
-            template_path="yimi/three_shot"
-        )
-        
-        if reconstructed_prompt and reconstructed_prompt.strip():
-            # logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
-            
-            # Get a new response using the reconstructed prompt
-            new_response = get_llm_response(reconstructed_prompt)
-            if 'API request failed' in new_response:
-                logger.warning(f"API request failed for task {task.get('instance_id', 'unknown')}, using original")
-                return task
-            # Update the task with the new prompt and response
-            task_copy = task.copy()
-            task_copy['messages'] = [{"role": "user", "content": reconstructed_prompt}]
-            task_copy['response'] = new_response
-            
-            # logger.info(f"Generated new response for task {task.get('instance_id', 'unknown')}")
-            return task_copy
-        else:
-            logger.warning(f"Prompt reconstruction returned empty for task {task.get('instance_id', 'unknown')}, using original")
-            return task
-            
-    except Exception as e:
-        logger.error(f"Failed to reconstruct prompt for task {task.get('instance_id', 'unknown')}: {e}")
-        return task
 
 # ================== Main Execution ==================
 

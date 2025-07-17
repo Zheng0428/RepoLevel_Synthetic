@@ -565,7 +565,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
         retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC)
         
         # Re-evaluate the retried tasks
-        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=timeout)
+        retried_bug_results = test_gpt_bug(retried_tasks, 50, 45)
         
         # Merge retried results with original results
         for instance_id, result in retried_bug_results.items():

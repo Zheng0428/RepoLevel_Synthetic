@@ -788,6 +788,10 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
             logger.warning(f"Failed to parse bug response for {instance_id} during retry")
             return None
         
+        # 复用原始的problem statement和unittest，只更新buggy code
+        result.problem_statement = task.get('gpt_problem_statement', '')
+        result.unittest_file = task.get('unittest_file')
+        
         # Update the task with new buggy code and regenerate patches
         updated_task = generate_patches_for_bug_data(task, result, DEFAULT_PATH)
         

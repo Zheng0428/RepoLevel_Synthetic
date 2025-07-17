@@ -534,14 +534,18 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     
     # 根据最终init结果筛选有足够通过测试的任务
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
-    logger.info("")
     
     logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(filtered_final_init_results, 50, 45)
-    
+    gpt_bug_results = test_gpt_bug(filtered_final_tasks, 50, 45)
+
     # 分析结果
     logger.info("Analyzing combined results...")
     analysis_results = analyze_combined_results(filtered_final_init_results, gpt_bug_results)
+
+    # 检查并重试bug未能被检测的的任务
+    logger.info("Re-running buggy state evaluation with final task set...")
+    
+
     
     return analysis_results
 

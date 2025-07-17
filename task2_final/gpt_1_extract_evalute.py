@@ -496,6 +496,8 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
     logger.info("Re-running init state evaluation with final task set...")
     final_init_results = test_init(final_tasks, 50, 45)
+    logger.info("")
+    
     logger.info("Starting GPT bug evaluation...")
     gpt_bug_results = test_gpt_bug(final_init_results, 50, 45)
     

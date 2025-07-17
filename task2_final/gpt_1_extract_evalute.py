@@ -31,7 +31,7 @@ from gpt_1_utils import (
     # Evaluation utilities
     create_temp_patch_file, get_repo_commit_name, merge_files_to_copy,
     create_error_report, run_parallel_tasks, save_evaluation_results,
-    retry_unittest_generation_for_task, retry_tasks_in_parallel,
+    retry_unittest_generation_for_task, retry_tasks_in_parallel, retry_buggy_code_in_parallel,
     # Constants
     NON_TEST_EXTS, read_yaml, CONC
 )

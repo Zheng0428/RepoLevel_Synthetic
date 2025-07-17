@@ -547,8 +547,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     
 
     
-    # Add buggy code retry mechanism
-    retry_count = 1  # Default retry once
+    # Add buggy code retry mechanism (fixed single retry)
     retry_categories = ['bug_not_detected', 'other_cases']
     retry_tasks = []
     
@@ -560,9 +559,10 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
             if task:
                 retry_tasks.append(task)
     
-    if retry_tasks and retry_count > 0:
+    if retry_tasks:
         logger.info(f"Retrying {len(retry_tasks)} tasks with insufficient bug detection...")
-        retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC, retry_count=retry_count)
+        # Fixed single retry without retry_count parameter
+        retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC)
         
         # Re-evaluate the retried tasks
         retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=timeout)

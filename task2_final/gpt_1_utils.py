@@ -749,19 +749,18 @@ def retry_tasks_in_parallel(tasks_need_retry: List[dict], repo_path: str) -> Lis
     
     return retried_tasks
 
-def retry_buggy_code_generation_for_task(task: dict, retry_count: int = 1) -> Optional[dict]:
+def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
     """
-    Retry generating buggy code for a task using the buggy_retry prompt
+    Retry generating buggy code for a task using the buggy_retry prompt (single retry only)
     
     Args:
         task: The task to retry
-        retry_count: Number of retries attempted
         
     Returns:
         Updated task with new buggy code, or None if failed
     """
     instance_id = task.get('instance_id', 'unknown')
-    logger.info(f"Retrying buggy code generation for task {instance_id} (attempt {retry_count})")
+    logger.info(f"Retrying buggy code generation for task {instance_id}")
     
     try:
         # Load the buggy retry prompt
@@ -790,7 +789,6 @@ def retry_buggy_code_generation_for_task(task: dict, retry_count: int = 1) -> Op
         
         # Update the task with new buggy code and regenerate patches
         updated_task = generate_patches_for_bug_data(task, result, DEFAULT_PATH)
-        updated_task['retry_count'] = retry_count  # Track retry attempts
         
         return updated_task
         
@@ -798,13 +796,13 @@ def retry_buggy_code_generation_for_task(task: dict, retry_count: int = 1) -> Op
         logger.error(f"Error retrying buggy code generation for {instance_id}: {str(e)}")
         return None
 
-def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CONC, retry_count: int = 1) -> List[dict]:
-    """Parallel version of buggy code retry"""
+def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CONC) -> List[dict]:
+    """Parallel version of buggy code retry (single retry only)"""
     retried_tasks = []
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_task = {
-            executor.submit(retry_buggy_code_generation_for_task, task, retry_count): task
+            executor.submit(retry_buggy_code_generation_for_task, task): task
             for task in tasks
         }
         

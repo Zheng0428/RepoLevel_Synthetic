@@ -545,8 +545,6 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     # 检查并重试bug未能被检测的的任务
     logger.info("Re-running buggy state evaluation with final task set...")
     
-
-    
     # Add buggy code retry mechanism (fixed single retry)
     retry_categories = ['bug_not_detected', 'other_cases']
     retry_tasks = []
@@ -637,7 +635,7 @@ if __name__ == "__main__":
         
     else:
         # Normal initialization
-        tasks_to_process = initial_tasks[:5]
+        tasks_to_process = initial_tasks[:20]
         all_perfect_results = {}
         all_perfect_tasks = []
         processed_ids = set()

@@ -199,20 +199,20 @@ def _extract_unittest_file(response: str) -> Optional[UnittestFile]:
     # 提取UNITTEST_FILE部分
     unittest_section = _extract_section(response, "UNITTEST_FILE")
     if not unittest_section:
-        return None
+        return UnittestFile(file_path=None, code=None)
     
     try:
         # 提取文件路径
         path_match = re.search(r"FILE_PATH:\s*(.+)", unittest_section)
         if not path_match:
-            return None
+            return UnittestFile(file_path=None, code=None)
         file_path = path_match.group(1).strip()
         
         # 提取代码内容
         code_pattern = r"===CODE_START===(.*?)===CODE_END==="
         code_match = re.search(code_pattern, unittest_section, re.DOTALL)
         if not code_match:
-            return None
+            return UnittestFile(file_path=None, code=None)
             
         code_content = code_match.group(1).strip()
         
@@ -227,7 +227,7 @@ def _extract_unittest_file(response: str) -> Optional[UnittestFile]:
         return UnittestFile(file_path=file_path, code=code_content)
         
     except Exception:
-        return None
+        return UnittestFile(file_path=None, code=None)
 
 # ================== Patch Generation Functions ==================
 
@@ -760,6 +760,7 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
     Returns:
         Updated task with new buggy code, or None if failed
     """
+    repo_path = DEFAULT_PATH
     instance_id = task.get('instance_id', 'unknown')
     logger.info(f"Retrying buggy code generation for task {instance_id}")
     
@@ -770,7 +771,22 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
         # Extract necessary information from the task
         problem_statement = task.get('gpt_problem_statement', '')
         unittest_code = task.get('unittest_file_code', '')
-        original_code = task.get('original_code', '')
+        repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
+        source_testbed = os.path.join(repo_path, repo_name)
+        
+        if not os.path.exists(source_testbed):
+            logger.warning(f"Source testbed not found: {source_testbed}")
+            return None
+        original_code = ''
+        input_files = task.get('input_files', [])
+        noise_files = task.get('noise_files', [])
+        
+        for file_path in input_files + noise_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
         
         # Format the prompt with task-specific information
         formatted_prompt = buggy_retry_prompt.format(
@@ -778,7 +794,7 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
             unittest_code=unittest_code,
             original_code=original_code
         )
-        
+        # print (formatted_prompt)
         # Get LLM response
         response = get_llm_response(formatted_prompt)
         
@@ -790,7 +806,8 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
         
         # 复用原始的problem statement和unittest，只更新buggy code
         result.problem_statement = task.get('gpt_problem_statement', '')
-        result.unittest_file = task.get('unittest_file')
+        result.unittest_file.file_path = task.get('unittest_file_path', '')
+        result.unittest_file.code = task.get('unittest_file_code', '')
         
         # Update the task with new buggy code and regenerate patches
         updated_task = generate_patches_for_bug_data(task, result, DEFAULT_PATH)

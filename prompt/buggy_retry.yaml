@@ -45,4 +45,6 @@ prompt_template: |
     ```
     ===CODE_END===
     ===FILE_END===
+
+    [Repeat FILE_START/FILE_END blocks for additional files if necessary]
     ===BUGGY_FILES_END===

@@ -367,6 +367,41 @@ def analyze_combined_results(init_results, gpt_bug_results):
         'summary': final_results['summary']
     }
 
+def filter_tasks_by_test_count(tasks: List[dict], init_results: dict, min_passed_tests: int = 5) -> Tuple[List[dict], dict]:
+    """
+    根据init测试结果筛选有足够通过测试的任务
+    
+    Args:
+        tasks: 任务列表
+        init_results: init测试结果
+        min_passed_tests: 最少通过测试数量
+        
+    Returns:
+        Tuple[List[dict], dict]: (筛选后的任务列表, 筛选后的init结果)
+    """
+    logger.info(f"Filtering tasks with at least {min_passed_tests} passing tests...")
+    filtered_tasks = []
+    filtered_init_results = {}
+    
+    for task in tasks:
+        instance_id = task['instance_id']
+        if instance_id in init_results:
+            init_result = init_results[instance_id]
+            passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
+            passed_count = len(passed_tests)
+            
+            if passed_count >= min_passed_tests:
+                filtered_tasks.append(task)
+                filtered_init_results[instance_id] = init_result
+                logger.debug(f"Task {instance_id} kept with {passed_count} passing tests")
+            else:
+                logger.info(f"Task {instance_id} filtered out with only {passed_count} passing tests")
+        else:
+            logger.warning(f"Task {instance_id} not found in init results, skipping")
+    
+    logger.info(f"Filtering complete: {len(filtered_tasks)}/{len(tasks)} tasks kept")
+    return filtered_tasks, filtered_init_results
+
 # ================== Main Pipeline Functions ==================
 
 def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
@@ -496,14 +531,17 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
     logger.info("Re-running init state evaluation with final task set...")
     final_init_results = test_init(final_tasks, 50, 45)
+    
+    # 根据最终init结果筛选有足够通过测试的任务
+    filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     logger.info("")
     
     logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(final_init_results, 50, 45)
+    gpt_bug_results = test_gpt_bug(filtered_final_init_results, 50, 45)
     
     # 分析结果
     logger.info("Analyzing combined results...")
-    analysis_results = analyze_combined_results(final_init_results, gpt_bug_results)
+    analysis_results = analyze_combined_results(filtered_final_init_results, gpt_bug_results)
     
     return analysis_results
 

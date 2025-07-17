@@ -16,6 +16,7 @@ from utils import fake_git_repo, get_llm_response
 import tiktoken, yaml
 from envs import DEFAULT_PATH
 CONC=5
+TEST_N=100
 
 
 def count_tokens(text: str, model_name: str = "gpt-4o") -> int:

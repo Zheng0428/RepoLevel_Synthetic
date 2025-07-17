@@ -33,7 +33,7 @@ from gpt_1_utils import (
     create_error_report, run_parallel_tasks, save_evaluation_results,
     retry_unittest_generation_for_task, retry_tasks_in_parallel, retry_buggy_code_in_parallel,
     # Constants
-    NON_TEST_EXTS, read_yaml, CONC
+    NON_TEST_EXTS, CONC, TEST_N
 )
 
 # Configure logging
@@ -635,7 +635,7 @@ if __name__ == "__main__":
         
     else:
         # Normal initialization
-        tasks_to_process = initial_tasks[:20]
+        tasks_to_process = initial_tasks[:TEST_N]
         all_perfect_results = {}
         all_perfect_tasks = []
         processed_ids = set()
@@ -746,7 +746,7 @@ if __name__ == "__main__":
         
         # Filter the original complete task list to get the ones that need retrying
         tasks_to_process = [
-            task for task in initial_tasks 
+            task for task in initial_tasks[:TEST_N]
             if task['instance_id'] not in processed_ids
         ]
         

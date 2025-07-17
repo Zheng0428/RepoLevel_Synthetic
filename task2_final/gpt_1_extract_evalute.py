@@ -747,7 +747,7 @@ if __name__ == "__main__":
         # Filter the original complete task list to get the ones that need retrying
         tasks_to_process = [
             task for task in initial_tasks 
-            if task['instance_id'] in all_failed_ids_this_iter and task['instance_id'] not in processed_ids
+            if task['instance_id'] not in processed_ids
         ]
         
         logger.info(f"End of Attempt {attempt}. Total successful instances: {len(all_perfect_tasks)}.")

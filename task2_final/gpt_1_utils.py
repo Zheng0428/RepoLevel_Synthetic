@@ -14,6 +14,7 @@ from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo, get_llm_response
 import tiktoken, yaml
+CONC=5
 
 
 def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
@@ -718,7 +719,7 @@ def retry_tasks_in_parallel(tasks_need_retry: List[dict], repo_path: str) -> Lis
         List[dict]: 重试后的任务列表
     """
     retried_tasks = []
-    max_workers = min(2, len(tasks_need_retry))
+    max_workers = min(CONC, len(tasks_need_retry))
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_task = {
@@ -765,7 +766,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             task_item=task,
             repo_path=repo_path,
             sample_data=all_perfect_tasks,
-            template_path="yimi/three_shot"
+            template_path="three_shot"
         )
         
         if reconstructed_prompt and reconstructed_prompt.strip():

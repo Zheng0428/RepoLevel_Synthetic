@@ -33,7 +33,7 @@ from gpt_1_utils import (
     create_error_report, run_parallel_tasks, save_evaluation_results,
     retry_unittest_generation_for_task, retry_tasks_in_parallel,
     # Constants
-    NON_TEST_EXTS, read_yaml
+    NON_TEST_EXTS, read_yaml, CONC
 )
 
 # Configure logging
@@ -585,7 +585,7 @@ if __name__ == "__main__":
         logger.info(f"Generating LLM responses for attempt {attempt}...")
         
         # Use ThreadPoolExecutor for concurrent requests with progress bar
-        max_workers = min(2, len(tasks_to_process))
+        max_workers = min(CONC, len(tasks_to_process))
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks with reconstruction
@@ -614,6 +614,7 @@ if __name__ == "__main__":
             tasks_to_process = completed_tasks
         
         # Phase 1: Extract Patches from LLM responses
+        print('Phase 1: Extract Patches from LLM responses')
         extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
         
         # If nothing was extracted, all tasks failed parsing. Prepare them for the next retry.
@@ -627,6 +628,7 @@ if __name__ == "__main__":
             continue
 
         # Phase 2: Evaluate successfully extracted patches
+        print('Phase 2: Evaluate successfully extracted patches')
         analysis_results = run_evaluation_phase(extracted_tasks, args.test)
 
         # --- Process and Segregate Results of the Current Iteration ---

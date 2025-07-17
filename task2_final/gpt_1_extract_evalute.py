@@ -547,6 +547,33 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
     
 
     
+    # Add buggy code retry mechanism
+    retry_count = 1  # Default retry once
+    retry_categories = ['bug_not_detected', 'other_cases']
+    retry_tasks = []
+    
+    # Collect tasks that need retry
+    for category in retry_categories:
+        for instance_id, result_data in analysis_results[category].items():
+            # Find the original task
+            task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
+            if task:
+                retry_tasks.append(task)
+    
+    if retry_tasks and retry_count > 0:
+        logger.info(f"Retrying {len(retry_tasks)} tasks with insufficient bug detection...")
+        retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC, retry_count=retry_count)
+        
+        # Re-evaluate the retried tasks
+        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=timeout)
+        
+        # Merge retried results with original results
+        for instance_id, result in retried_bug_results.items():
+            gpt_bug_results[instance_id] = result
+        
+        # Re-analyze combined results after retry
+        analysis_results = analyze_combined_results(filtered_final_init_results, gpt_bug_results)
+
     return analysis_results
 
 # ================== Main Execution ==================

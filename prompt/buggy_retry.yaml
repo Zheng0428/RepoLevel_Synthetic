@@ -1,1 +1,48 @@
 prompt_template: |
+    The previous buggy code generation did not produce a detectable bug. You need to regenerate ONLY the buggy code while keeping the same problem statement and unittest.
+
+    ## Original Problem Statement:
+    {problem_statement}
+
+    ## Current Unittest:
+    {unittest_code}
+
+    ## Original Clean Code:
+    {original_code}
+
+    ## Task:
+    Regenerate ONLY the buggy code for the same problem statement and unittest, ensuring the bug is detectable by the existing unittest.
+
+    ## Requirements:
+    1. **Keep the same problem statement** - do not change the bug concept
+    2. **Regenerate ONLY the buggy code** - keep the unittest exactly the same
+    3. **Ensure the bug is detectable** - the existing unittest must fail with the new buggy code
+    4. **Maintain the same file structure** - only modify the code in the specified files
+
+    ## Output Format:
+    ===PROBLEM_STATEMENT_START===
+    {problem_statement}
+    ===PROBLEM_STATEMENT_END===
+
+    ===BUG_ANALYSIS_START===
+    **Test Detection Analysis:**
+    - Why the previous buggy code failed to be detected
+    - How the new buggy code will ensure detection by the existing tests
+    - What specific test cases will now fail with the new buggy code
+
+    **Bug Characteristics:**
+    - Type of programming error introduced
+    - Why this bug is subtle but detectable by the existing tests
+    - How this addresses the previous detection failure
+    ===BUG_ANALYSIS_END===
+
+    ===BUGGY_FILES_START===
+    ===FILE_START===
+    FILE_PATH: [exact file path]
+    ===CODE_START===
+    ```python
+    [complete regenerated buggy code for this file]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+    ===BUGGY_FILES_END===

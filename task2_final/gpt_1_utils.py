@@ -749,6 +749,77 @@ def retry_tasks_in_parallel(tasks_need_retry: List[dict], repo_path: str) -> Lis
     
     return retried_tasks
 
+def retry_buggy_code_generation_for_task(task: dict, retry_count: int = 1) -> Optional[dict]:
+    """
+    Retry generating buggy code for a task using the buggy_retry prompt
+    
+    Args:
+        task: The task to retry
+        retry_count: Number of retries attempted
+        
+    Returns:
+        Updated task with new buggy code, or None if failed
+    """
+    instance_id = task.get('instance_id', 'unknown')
+    logger.info(f"Retrying buggy code generation for task {instance_id} (attempt {retry_count})")
+    
+    try:
+        # Load the buggy retry prompt
+        buggy_retry_prompt = read_yaml('buggy_retry')['prompt_template']
+        
+        # Extract necessary information from the task
+        problem_statement = task.get('gpt_problem_statement', '')
+        unittest_code = task.get('unittest_file_code', '')
+        original_code = task.get('original_code', '')
+        
+        # Format the prompt with task-specific information
+        formatted_prompt = buggy_retry_prompt.format(
+            problem_statement=problem_statement,
+            unittest_code=unittest_code,
+            original_code=original_code
+        )
+        
+        # Get LLM response
+        response = get_llm_response(formatted_prompt)
+        
+        # Parse the response to get new buggy code
+        result = parse_bug_response(response)
+        if not result:
+            logger.warning(f"Failed to parse bug response for {instance_id} during retry")
+            return None
+        
+        # Update the task with new buggy code and regenerate patches
+        updated_task = generate_patches_for_bug_data(task, result, DEFAULT_PATH)
+        updated_task['retry_count'] = retry_count  # Track retry attempts
+        
+        return updated_task
+        
+    except Exception as e:
+        logger.error(f"Error retrying buggy code generation for {instance_id}: {str(e)}")
+        return None
+
+def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CONC, retry_count: int = 1) -> List[dict]:
+    """Parallel version of buggy code retry"""
+    retried_tasks = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(retry_buggy_code_generation_for_task, task, retry_count): task
+            for task in tasks
+        }
+        
+        for future in tqdm(as_completed(future_to_task), total=len(tasks), desc="Retrying buggy code generation"):
+            task = future_to_task[future]
+            try:
+                result = future.result()
+                if result:
+                    retried_tasks.append(result)
+            except Exception as e:
+                instance_id = task.get('instance_id', 'unknown')
+                logger.error(f"Task {instance_id} failed during parallel retry: {str(e)}")
+    
+    return retried_tasks
+
 def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list, all_tasks: list, repo_path: str) -> dict:
     """
     Attempts to reconstruct the prompt for a task using the new function.

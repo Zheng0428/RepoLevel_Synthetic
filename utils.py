@@ -1190,6 +1190,87 @@ def get_llm_response(prompt: str, temperature: float = 0.7) -> str:
     return None
 
 
+def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
+    """
+    Sends a prompt to the DeepSeek model and returns the text response.
+
+    Args:
+        prompt: The user's question or instruction.
+        temperature: Temperature for response randomness
+
+    Returns:
+        The text response from the model as a string, or None if the request fails.
+    """
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    # The payload follows the structure required by the DeepSeek API endpoint.
+    payload = {
+        "model": "DeepSeek-V3-0324",
+        "temperature": temperature,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+        "extra": {
+            "ray_env": "tiktok.aiic.deepseek_zhangbiao168"
+        }
+    }
+
+    # The URL for the DeepSeek API
+    url = 'https://maas.byteintl.net/service/api/v1/chat/completions'
+
+    # Sending the request with retry logic
+    for retry in range(3):
+        try:
+            # Make the API call
+            response = requests.post(
+                url,
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=600  # 10-minute timeout
+            )
+
+            if response.status_code == 200:
+                response_json = response.json()
+                if "choices" in response_json and len(response_json["choices"]) > 0:
+                    response_text = response_json["choices"][0]["message"]["content"]
+                    return response_text
+                else:
+                    print(f"Unexpected response format: {response_json}")
+            
+            error_msg = f"API request error: {response.status_code}, {response.text}"
+            print(f"{error_msg} - Retrying ({retry+1}/3)")
+
+            try:
+                error_json = response.json()
+                if "error" in error_json and error_json["error"].get("code") == '-4003':
+                    print("Rate limit or quota exceeded, returning None")
+                    return None
+            except:
+                pass
+                
+            time.sleep(10.0)
+        
+        except requests.exceptions.RequestException as e:
+            print(f"API request exception: {str(e)} - Retrying ({retry+1}/3)")
+            time.sleep(30)
+        except Exception as e:
+            print(f"Unexpected error: {str(e)} - Retrying ({retry+1}/3)")
+            time.sleep(30)
+    
+    print("All retry attempts failed for DeepSeek")
+    return None
+
+
 if __name__ == "__main__":
     response = get_llm_response('中国的首都是哪里？')
     print(response)

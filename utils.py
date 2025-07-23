@@ -8,7 +8,8 @@ import re
 import subprocess
 import uuid
 from collections import OrderedDict
-
+import logging, yaml, tiktoken
+logger = logging.getLogger(__name__)
 from envs import PLAYGROUND_DIR, PROJECT_FILE_LOC, DEFAULT_PATH
 
 
@@ -1271,6 +1272,32 @@ def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
     return None
 
 # ================== prompt construction ==================
+def read_yaml(config='default'):
+    yaml_file = f'/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/prompt/{config}.yaml'
+    with open(yaml_file, 'r', encoding='utf-8') as yaml_file:
+        return yaml.safe_load(yaml_file)
+
+def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
+    """
+    计算输入字符串的token数。
+
+    :param text: 输入的字符串
+    :param model_name: 使用的模型名称，默认为"gpt-4"
+    :return: 字符串的token数
+    """
+    # 获取指定模型的编码器
+    try:
+        encoding = tiktoken.encoding_for_model(model_name)
+        
+        # 将字符串编码为token
+        tokens = encoding.encode(text)
+        
+        # 返回token的数量
+        return len(tokens)
+    except:
+        return 1000000
+
+    
 # origin prompt
 def construct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list, template_path: str) -> str:
     """

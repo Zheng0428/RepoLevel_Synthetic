@@ -13,40 +13,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
-from utils import get_deepseek_response as get_model_resposne #get_llm_response, get_deepseek_response
-import tiktoken, yaml
+from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response
 from envs import DEFAULT_PATH
 from utils import construct_three_shot_prompt as construct_prompt
 from utils import construct_unittest_prompt as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
 CONC=2
-TEST_N=20
+TEST_N=10
 
 
-def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
-    """
-    计算输入字符串的token数。
-
-    :param text: 输入的字符串
-    :param model_name: 使用的模型名称，默认为"gpt-4"
-    :return: 字符串的token数
-    """
-    # 获取指定模型的编码器
-    try:
-        encoding = tiktoken.encoding_for_model(model_name)
-        
-        # 将字符串编码为token
-        tokens = encoding.encode(text)
-        
-        # 返回token的数量
-        return len(tokens)
-    except:
-        return 1000000
-
-def read_yaml(config='default'):
-    yaml_file = f'/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/prompt/{config}.yaml'
-    with open(yaml_file, 'r', encoding='utf-8') as yaml_file:
-        return yaml.safe_load(yaml_file)
 
 logger = logging.getLogger(__name__)
 

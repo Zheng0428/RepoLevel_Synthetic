@@ -25,8 +25,7 @@ from gpt_1_utils import (
     load_processed_ids_from_output, load_perfect_tasks_from_output,
     append_results_to_jsonl,
     # Prompt reconstruction
-    reconstruct_three_shot_prompt, process_single_task_with_reconstruction,
-    origin_prompt,
+    process_single_task_with_reconstruction,
     # Evaluation utilities
     create_temp_patch_file, get_repo_commit_name, merge_files_to_copy,
     create_error_report, run_parallel_tasks, save_evaluation_results,
@@ -502,7 +501,7 @@ def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_resul
     
     return final_tasks
 
-def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
+def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     """
     Runs the full evaluation pipeline (init, gpt_bug) and analysis.
     
@@ -510,16 +509,6 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], is_test_mode: bool):
         The dictionary of analysis results.
     """
     logger.info(f"=== Phase 2: Evaluating patches for {len(tasks_to_evaluate)} tasks ===")
-    
-    if is_test_mode:
-        EXP_PATH_TEST = '/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/test_log/py-gpt-bug-patch-commit_2025-07-03-07_combined'
-        final_results_path = f"{EXP_PATH_TEST}/final_analysis_results.json"
-        logger.info(f"TEST MODE: Loading existing results from {final_results_path}")
-        with open(final_results_path, "r") as f:
-            analysis_results = json.load(f)
-        return analysis_results.get('categorized_results', {
-            'perfect_tests': {}, 'init_failed': {}, 'bug_not_detected': {}, 'other_cases': {}
-        })
 
     # 第一次运行init测试
     logger.info("Starting initial init state evaluation...")
@@ -580,8 +569,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Extract bugs and evaluate GPT bug detection with retry mechanism.')
-    parser.add_argument('--test', action='store_true', 
-                       help='Use test mode for evaluation (load existing results)')
+
     parser.add_argument('--max_retries', type=int, default=5, 
                         help='Maximum number of retries for failed items (default: 5). Set to 1 to disable retries.')
     parser.add_argument('--enable_retry', action='store_true', 
@@ -698,7 +686,7 @@ if __name__ == "__main__":
 
         # Phase 2: Evaluate successfully extracted patches
         print('Phase 2: Evaluate successfully extracted patches')
-        analysis_results = run_evaluation_phase(extracted_tasks, args.test)
+        analysis_results = run_evaluation_phase(extracted_tasks)
 
         # --- Process and Segregate Results of the Current Iteration ---
         perfect_results_this_iter = analysis_results.get('perfect_tests', {})

@@ -9,7 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 # Local imports
-from utils import get_llm_response
 from envs import DEFAULT_PATH, GENERATE_DATA_PATH, LOG_PATH
 from temp_testbed import TempTestbed, get_all_filenames
 from grading_simple import get_eval_report_synthetic
@@ -457,13 +456,14 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     logger.info(f"Extraction phase summary: {len(extracted_tasks)} succeeded, {len(failed_ids)} failed parsing.")
     return extracted_tasks, failed_ids
 
-def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_results: dict) -> List[dict]:
+def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_results: dict, threshold = 5) -> List[dict]:
     """
-    检查init测试结果，对PASSED cases < 5的任务进行重试
+    检查init测试结果，对PASSED cases < threshold的任务进行重试
     
     Args:
         tasks_to_evaluate: 原始任务列表
         init_results: init测试结果
+        threshold: 一个instance中一个pass的阈值
         
     Returns:
         List[dict]: 最终的任务列表（包含重试后的任务）
@@ -479,7 +479,7 @@ def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_resul
             passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
             passed_count = len(passed_tests)
             
-            if passed_count < 5:
+            if passed_count < threshold:
                 logger.info(f"Task {instance_id} has only {passed_count} passing tests, needs retry")
                 tasks_need_retry.append(task)
             else:

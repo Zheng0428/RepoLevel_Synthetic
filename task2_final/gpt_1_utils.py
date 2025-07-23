@@ -12,11 +12,12 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
-from utils import fake_git_repo, get_llm_response
+from utils import fake_git_repo
+from utils import get_deepseek_response as get_model_resposne #get_llm_response, get_deepseek_response
 import tiktoken, yaml
 from envs import DEFAULT_PATH
-CONC=5
-TEST_N=100
+CONC=2
+TEST_N=20
 
 
 def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
@@ -686,7 +687,7 @@ def retry_unittest_generation_for_task(task: dict, repo_path: str) -> Optional[d
         )
         
         # 获取新的LLM响应
-        new_response = get_llm_response(retry_prompt)
+        new_response = get_model_resposne(retry_prompt)
         if 'API request failed' in new_response:
             logger.warning(f"API request failed for retry of task {instance_id}")
             return None
@@ -797,7 +798,7 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
         )
         # print (formatted_prompt)
         # Get LLM response
-        response = get_llm_response(formatted_prompt)
+        response = get_model_resposne(formatted_prompt)
         
         # Parse the response to get new buggy code
         result = parse_bug_response(response)
@@ -865,7 +866,8 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             # logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
             
             # Get a new response using the reconstructed prompt
-            new_response = get_llm_response(reconstructed_prompt)
+            print (len(reconstructed_prompt))
+            new_response = get_model_resposne(reconstructed_prompt)
             if 'API request failed' in new_response:
                 logger.warning(f"API request failed for task {task.get('instance_id', 'unknown')}, using original")
                 return task

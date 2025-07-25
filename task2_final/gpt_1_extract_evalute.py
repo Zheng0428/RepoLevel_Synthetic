@@ -469,12 +469,12 @@ def check_and_retry_insufficient_tests(
     current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=TEST_N)
     current_tasks = tasks_to_evaluate.copy()
     retry_count = 0
+    all_sufficient_tasks = []  # 移动到循环外部，用于累积所有通过的任务
     tasks_need_retry = []
-    tasks_sufficient = []
     
     while retry_count < max_retries and current_tasks:
+        current_sufficient = []  # 重命名为current_sufficient，仅记录本轮通过的任务
         tasks_need_retry = []
-        tasks_sufficient = []
         
         for task in current_tasks:
             instance_id = task['instance_id']
@@ -486,13 +486,17 @@ def check_and_retry_insufficient_tests(
                 if passed_count < threshold:
                     tasks_need_retry.append(task)
                 else:
-                    tasks_sufficient.append(task)
+                    current_sufficient.append(task)  # 添加到本轮通过列表
             else:
                 logger.warning(f"Task {instance_id} not found in init results, adding to retry")
                 tasks_need_retry.append(task)
         
+        # 将本轮通过的任务添加到累积列表
+        all_sufficient_tasks.extend(current_sufficient)
+        logger.info(f"Current iteration: {len(current_sufficient)} tasks passed, total accumulated: {len(all_sufficient_tasks)}")
+        
         if not tasks_need_retry:
-            logger.info("All tasks have sufficient test coverage, no retry needed")
+            logger.info("All remaining tasks have sufficient test coverage, no more retry needed")
             break
             
         retry_count += 1
@@ -511,8 +515,8 @@ def check_and_retry_insufficient_tests(
         logger.info(f"Retry {retry_count} phase completed. Tests re-evaluated for {len(retried_tasks)} tasks")
     
     # 合并结果
-    final_tasks = tasks_sufficient + current_tasks
-    logger.info(f"Test evaluation with retries completed. Total tasks: {len(final_tasks)}")
+    final_tasks = all_sufficient_tasks + current_tasks
+    logger.info(f"Test evaluation with retries completed. Total sufficient tasks: {len(all_sufficient_tasks)}, remaining tasks after max retries: {len(current_tasks)}, total: {len(final_tasks)}")
     return final_tasks, current_init_results
 
 

@@ -462,12 +462,11 @@ def check_and_retry_insufficient_tests(
 ) -> List[dict]:
     """
     检查并重试测试不足的任务，包含完整的test_init调用和重试循环
-    (内部硬编码test_init参数: workers=50, timeout=45)
     """
     logger.info(f"Starting test evaluation with up to {max_retries} retries...")
     
     # 初始运行test_init获取基准结果（硬编码参数）
-    current_init_results = test_init(tasks_to_evaluate, 50, 45)
+    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=TEST_N)
     current_tasks = tasks_to_evaluate.copy()
     retry_count = 0
     tasks_need_retry = []
@@ -493,19 +492,29 @@ def check_and_retry_insufficient_tests(
                 tasks_need_retry.append(task)
         
         if not tasks_need_retry:
+            logger.info("All tasks have sufficient test coverage, no retry needed")
             break
             
         retry_count += 1
-        logger.info(f"Retry attempt {retry_count}/{max_retries}: Retrying {len(tasks_need_retry)} tasks...")
+        logger.info(f"Retry attempt {retry_count}/{max_retries}: Retrying {len(tasks_need_retry)} insufficient tasks...")
         
-        # 重新运行test_init获取最新结果
-        retry_init_results = test_init(tasks_need_retry, max_workers=CONC, timeout=TEST_N)
-        current_init_results.update(retry_init_results)
-        current_tasks = tasks_need_retry
+        # 重新生成任务（补充您要求的关键步骤）
+        retried_tasks = retry_tasks_in_parallel(tasks_need_retry, DEFAULT_PATH)
+        
+        # 对重新生成的任务执行test_init
+        retry_init_results = test_init(retried_tasks, max_workers=CONC, timeout=TEST_N)
+        
+        # 更新当前任务和测试结果
+        current_tasks = retried_tasks
+        current_init_results = retry_init_results
+        
+        logger.info(f"Retry {retry_count} phase completed. Tests re-evaluated for {len(retried_tasks)} tasks")
     
-    final_tasks = tasks_sufficient + [task for task in current_tasks if task['instance_id'] in current_init_results and len(current_init_results[task['instance_id']].get('tests_status', {}).get('PASSED', [])) >= threshold]
-    logger.info(f"Retry process completed. Total sufficient tasks: {len(final_tasks)}")
-    return final_tasks, current_init_results  # 返回任务列表和对应的测试结果
+    # 合并结果
+    final_tasks = tasks_sufficient + current_tasks
+    logger.info(f"Test evaluation with retries completed. Total tasks: {len(final_tasks)}")
+    return final_tasks, current_init_results
+
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     """
@@ -529,7 +538,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
     logger.info("Starting GPT bug evaluation...")
-    gpt_bug_results = test_gpt_bug(filtered_final_tasks, 50, 45)
+    gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=TEST_N)
 
     # 分析结果
     logger.info("Analyzing combined results...")
@@ -556,7 +565,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
         retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC)
         
         # Re-evaluate the retried tasks
-        retried_bug_results = test_gpt_bug(retried_tasks, 50, 45)
+        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=TEST_N)
         
         # Merge retried results with original results
         for instance_id, result in retried_bug_results.items():

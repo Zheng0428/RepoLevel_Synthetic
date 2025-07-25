@@ -455,51 +455,57 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
     logger.info(f"Extraction phase summary: {len(extracted_tasks)} succeeded, {len(failed_ids)} failed parsing.")
     return extracted_tasks, failed_ids
 
-def check_and_retry_insufficient_tests(tasks_to_evaluate: List[dict], init_results: dict, threshold = 5) -> List[dict]:
+def check_and_retry_insufficient_tests(
+    tasks_to_evaluate: List[dict], 
+    threshold=5, 
+    max_retries=5
+) -> List[dict]:
     """
-    检查init测试结果，对PASSED cases < threshold的任务进行重试
+    检查并重试测试不足的任务，包含完整的test_init调用和重试循环
+    (内部硬编码test_init参数: workers=50, timeout=45)
+    """
+    logger.info(f"Starting test evaluation with up to {max_retries} retries...")
     
-    Args:
-        tasks_to_evaluate: 原始任务列表
-        init_results: init测试结果
-        threshold: 一个instance中一个pass的阈值
-        
-    Returns:
-        List[dict]: 最终的任务列表（包含重试后的任务）
-    """
-    logger.info("Checking test counts for retry...")
+    # 初始运行test_init获取基准结果（硬编码参数）
+    current_init_results = test_init(tasks_to_evaluate, 50, 45)
+    current_tasks = tasks_to_evaluate.copy()
+    retry_count = 0
     tasks_need_retry = []
     tasks_sufficient = []
     
-    for task in tasks_to_evaluate:
-        instance_id = task['instance_id']
-        if instance_id in init_results:
-            init_result = init_results[instance_id]
-            passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
-            passed_count = len(passed_tests)
-            
-            if passed_count < threshold:
-                logger.info(f"Task {instance_id} has only {passed_count} passing tests, needs retry")
-                tasks_need_retry.append(task)
+    while retry_count < max_retries and current_tasks:
+        tasks_need_retry = []
+        tasks_sufficient = []
+        
+        for task in current_tasks:
+            instance_id = task['instance_id']
+            if instance_id in current_init_results:
+                init_result = current_init_results[instance_id]
+                passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
+                passed_count = len(passed_tests)
+                
+                if passed_count < threshold:
+                    tasks_need_retry.append(task)
+                else:
+                    tasks_sufficient.append(task)
             else:
-                logger.info(f"Task {instance_id} has {passed_count} passing tests, sufficient")
-                tasks_sufficient.append(task)
-        else:
-            logger.warning(f"Task {instance_id} not found in init results, adding to retry")
-            tasks_need_retry.append(task)
+                logger.warning(f"Task {instance_id} not found in init results, adding to retry")
+                tasks_need_retry.append(task)
+        
+        if not tasks_need_retry:
+            break
+            
+        retry_count += 1
+        logger.info(f"Retry attempt {retry_count}/{max_retries}: Retrying {len(tasks_need_retry)} tasks...")
+        
+        # 重新运行test_init获取最新结果
+        retry_init_results = test_init(tasks_need_retry, max_workers=CONC, timeout=TEST_N)
+        current_init_results.update(retry_init_results)
+        current_tasks = tasks_need_retry
     
-    # 开始处理重试
-    final_tasks = list(tasks_sufficient)  # 复制sufficient任务
-    
-    if tasks_need_retry:
-        logger.info(f"Retrying {len(tasks_need_retry)} tasks with insufficient test coverage...")
-        retried_tasks = retry_tasks_in_parallel(tasks_need_retry, DEFAULT_PATH)
-        final_tasks.extend(retried_tasks)
-        logger.info(f"Retry phase completed. Total tasks: {len(final_tasks)}")
-    else:
-        logger.info("All tasks have sufficient test coverage, no retry needed")
-    
-    return final_tasks
+    final_tasks = tasks_sufficient + [task for task in current_tasks if task['instance_id'] in current_init_results and len(current_init_results[task['instance_id']].get('tests_status', {}).get('PASSED', [])) >= threshold]
+    logger.info(f"Retry process completed. Total sufficient tasks: {len(final_tasks)}")
+    return final_tasks, current_init_results  # 返回任务列表和对应的测试结果
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     """
@@ -511,15 +517,13 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     logger.info(f"=== Phase 2: Evaluating patches for {len(tasks_to_evaluate)} tasks ===")
 
     # 第一次运行init测试
-    logger.info("Starting initial init state evaluation...")
-    init_results = test_init(tasks_to_evaluate, 50, 45)
+    logger.info("Starting construct init state evaluation...")
     
-    # 检查并重试不足的任务
-    final_tasks = check_and_retry_insufficient_tests(tasks_to_evaluate, init_results)
+    # 检查并重试不足的任务（同时获取最终测试结果）
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, max_retries=5)
     
-    # 使用最终的任务列表重新运行init测试，清除之前的FAILED状态
-    logger.info("Re-running init state evaluation with final task set...")
-    final_init_results = test_init(final_tasks, 50, 45)
+    # 移除重复的test_init调用
+    logger.info("Successfully obtained final test results from retry process")
     
     # 根据最终init结果筛选有足够通过测试的任务
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)

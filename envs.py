@@ -19,6 +19,7 @@ os.makedirs(PLAYGROUND_DIR, exist_ok=True)
 # Please download it from the original Agentless repository
 # https://github.com/OpenAutoCoder/Agentless/tree/main
 PROJECT_FILE_LOC = os.environ.get("PROJECT_FILE_LOC", "/mnt/bn/tiktok-mm-5/aiic/users/yiming/data/swe-verified/repo_structure")
+TRUE_PROJECT_FILE_LOC = "/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/true_repo_structure"
 PATCH_FILES_JSON = os.environ.get("PATCH_FILRES", "/mnt/bn/tiktok-mm-5/aiic/users/yiming/data/swe-verified/verified/swe-bench-verified-patch-files.json")
 
 # TESTBED_DIR = os.environ.get("TESTBED_DIR", "/opt/tiger/expr/testbed")

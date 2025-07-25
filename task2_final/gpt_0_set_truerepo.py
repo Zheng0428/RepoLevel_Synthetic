@@ -3,10 +3,11 @@ import os
 import subprocess
 import shutil
 from envs import DEFAULT_PATH, ORIGIN_DEFAULT_PATH
-from envs import GENERATE_DATA_PATH
+from envs import GENERATE_DATA_PATH, TRUE_PROJECT_FILE_LOC
 from temp_testbed import get_all_filenames
 import tempfile
-
+from utils import get_project_structure_from_scratch
+import argparse
 
 def generate_true_repo(data):
     """
@@ -71,7 +72,7 @@ def generate_true_repo(data):
     return data
 
 
-def process_jsonl(input_path):
+def process_jsonl(input_path, args):
     """处理JSONL文件中的每一行数据"""
     if not os.path.exists(input_path):
         print(f"Warning: Input file not found: {input_path}. Skipping.")
@@ -88,6 +89,13 @@ def process_jsonl(input_path):
                 data = json.loads(line)
                 generate_true_repo(data)
                 num_processed_lines += 1
+                if args.save_structure:
+                    repo_playground = os.path.join(DEFAULT_PATH, data.get('repo', '').replace('/', '__') + '__' + data.get('base_commit', '')[:6])
+                    structure = get_project_structure_from_scratch(data['repo'], data['base_commit'], data['instance_id'], repo_playground)
+                    structure_file_path = f"{TRUE_PROJECT_FILE_LOC}/{data['instance_id']}.json"
+                    os.makedirs(TRUE_PROJECT_FILE_LOC, exist_ok=True)
+                    with open(structure_file_path, "w") as f_out_structure:
+                        json.dump(structure, f_out_structure, indent=4)
             except Exception as e:
                 print(f"Error processing line {line_num}: {str(e)}")
                 continue
@@ -96,7 +104,12 @@ def process_jsonl(input_path):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Process project structure')
+    parser.add_argument('--save-structure', action='store_true', 
+                       help='Whether to save project structure to files')
+    args = parser.parse_args()
+    
     # 定义输入文件路径
     input_jsonl_file = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
-    process_jsonl(input_jsonl_file)
+    process_jsonl(input_jsonl_file, args)
     

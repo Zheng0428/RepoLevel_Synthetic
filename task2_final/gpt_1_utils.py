@@ -14,7 +14,7 @@ from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
 from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response
-from envs import DEFAULT_PATH
+from envs import DEFAULT_PATH, TRUE_PROJECT_FILE_LOC
 from utils import construct_three_shot_prompt as construct_prompt
 from utils import construct_unittest_prompt as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
@@ -763,11 +763,14 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
         # Use the new reconstruction function
         if len(all_perfect_tasks) < 3:
             all_perfect_tasks = all_tasks
+        with open(os.path.join(TRUE_PROJECT_FILE_LOC, task['instance_id'] + ".json")) as f:
+            structure = json.load(f)
         reconstructed_prompt = construct_prompt(
             task_item=task,
             repo_path=repo_path,
             sample_data=all_perfect_tasks,
-            template_path="three_shot"
+            template_path="three_shot",
+            structure = structure
         )
         
         if reconstructed_prompt and reconstructed_prompt.strip():

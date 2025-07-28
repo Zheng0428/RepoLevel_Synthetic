@@ -1532,38 +1532,7 @@ def construct_buggy_prompt(task: dict) -> str:
 
 # script ranker prompt
 def script_ranker_prompt(task: dict) -> str:
-    repo_path = DEFAULT_PATH
-    instance_id = task.get('instance_id', 'unknown')
-    logger.info(f"Retrying buggy code generation for task {instance_id}")
-    # Load the buggy retry prompt
-    buggy_retry_prompt = read_yaml('buggy_retry')['prompt_template']
-    
-    # Extract necessary information from the task
-    problem_statement = task.get('gpt_problem_statement', '')
-    unittest_code = task.get('unittest_file_code', '')
-    repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
-    source_testbed = os.path.join(repo_path, repo_name)
-    
-    if not os.path.exists(source_testbed):
-        logger.warning(f"Source testbed not found: {source_testbed}")
-        return None
-    original_code = ''
-    input_files = task.get('input_files', [])
-    noise_files = task.get('noise_files', [])
-    
-    for file_path in input_files + noise_files:
-        full_file_path = os.path.join(source_testbed, file_path)
-        if os.path.exists(full_file_path):
-            with open(full_file_path, 'r', encoding='utf-8') as f:
-                file_content = f.read()
-                original_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-    
-    # Format the prompt with task-specific information
-    formatted_prompt = buggy_retry_prompt.format(
-        problem_statement=problem_statement,
-        unittest_code=unittest_code,
-        original_code=original_code
-    )
+    xxx
     return formatted_prompt
 
 

@@ -41,8 +41,8 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
         return None
 
 
-def extract_ranking(response: str, max_quantity: int) -> list:
-    """从LLM响应中提取并验证排序结果"""
+def extract_ranking(response: str, max_quantity: int) -> dict:
+    """从LLM响应中提取并验证排序结果，返回字典格式"""
     try:
         import re
         
@@ -51,7 +51,7 @@ def extract_ranking(response: str, max_quantity: int) -> list:
         ranking_match = re.search(ranking_pattern, response, re.DOTALL)
         if not ranking_match:
             print("No ranking section found in response")
-            return None
+            return {}
             
         ranking_content = ranking_match.group(1)
         
@@ -61,23 +61,63 @@ def extract_ranking(response: str, max_quantity: int) -> list:
         
         if not file_matches:
             print("No file entries found in ranking")
-            return None
+            return {}
             
-        results = []
+        results = {}
         for file_content in file_matches[:max_quantity]:
+            content = file_content.strip()
+            
             # 提取FILE_PATH
             path_pattern = r'FILE_PATH:\s*(.+?)(?=\n|$)'
-            path_match = re.search(path_pattern, file_content.strip())
+            path_match = re.search(path_pattern, content)
+            
+            # 提取DEPENDENCIES
+            deps_pattern = r'DEPENDENCIES:\s*(.+?)(?=\n[A-Z]|$)'
+            deps_match = re.search(deps_pattern, content, re.DOTALL)
+            
+            # 提取IMPORTANCE_SCORE
+            score_pattern = r'IMPORTANCE_SCORE:\s*([0-9.]+)'
+            score_match = re.search(score_pattern, content)
+            
+            # 提取REASONING
+            reasoning_pattern = r'REASONING:\s*(.+?)(?=\n[A-Z]|$)'
+            reasoning_match = re.search(reasoning_pattern, content, re.DOTALL)
             
             if path_match:
                 file_path = path_match.group(1).strip()
-                results.append(file_path)
+                
+                # 解析依赖列表
+                dependencies = []
+                if deps_match:
+                    deps_str = deps_match.group(1).strip()
+                    if deps_str and deps_str.lower() not in ['none', '[]', '']:
+                        # 处理列表格式，移除方括号和引号
+                        deps_str = deps_str.strip('[]')
+                        dependencies = [dep.strip().strip('"\'') for dep in deps_str.split(',') if dep.strip()]
+                
+                importance_score = 0.0
+                if score_match:
+                    try:
+                        importance_score = float(score_match.group(1))
+                    except ValueError:
+                        importance_score = 0.0
+                
+                reasoning = ""
+                if reasoning_match:
+                    reasoning = reasoning_match.group(1).strip()
+                
+                # 构建字典结构
+                results[file_path] = {
+                    'importance_score': importance_score,
+                    'reasoning': reasoning,
+                    'dependencies': dependencies
+                }
         
-        return results if results else None
+        return results
         
     except Exception as e:
         print(f"Error extracting ranking: {str(e)}")
-        return None
+        return {}
 
 
 def main(args):

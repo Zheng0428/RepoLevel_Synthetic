@@ -19,7 +19,7 @@ from utils import construct_three_shot_prompt as construct_prompt
 from utils import construct_unittest_prompt as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
 CONC=2
-TEST_N=10
+TEST_N=20
 
 
 

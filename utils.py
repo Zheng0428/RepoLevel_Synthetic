@@ -1541,8 +1541,10 @@ def script_ranker_prompt(structure: dict) -> str:
         
     Returns:
         str: 格式化的prompt字符串
+        list: 所有有效py文件路径
     """
     file_content_dic = extract_python_files_without_tests(structure)
+    valid_files = list(file_content_dic.keys())
     
     # 将字典格式化为字符串
     code_content = ""
@@ -1559,7 +1561,7 @@ def script_ranker_prompt(structure: dict) -> str:
         repository_structure=code_content,
     )
 
-    return ranker_prompt
+    return ranker_prompt, valid_files
 
 def extract_python_files_without_tests(structure, current_path="") -> dict:
     """

@@ -2,6 +2,8 @@ import json
 import os
 import utils
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 
 def validate_dependencies(ranking_results: dict, valid_files: list) -> dict:
@@ -152,6 +154,34 @@ def extract_ranking(response: str, max_quantity: int) -> dict:
         return {}
 
 
+def process_single_record(record: dict, structure_path: str, max_quantity: int) -> dict:
+    """处理单个记录，返回处理后的记录"""
+    try:
+        instance_id = record.get('instance_id')
+        if not instance_id:
+            return record
+
+        # 查找对应的仓库JSON文件
+        json_filename = f"{instance_id}.json"
+        json_path = os.path.join(structure_path, json_filename)
+
+        if not os.path.isfile(json_path):
+            # 仍将原始记录返回
+            return record
+
+        # 处理仓库排序
+        ranking_result = process_repo_json(json_path, max_quantity)
+
+        if ranking_result:
+            # 添加排序信息到记录
+            record['ranker_info'] = ranking_result
+
+        return record
+    except Exception as e:
+        print(f"Error processing record {record.get('instance_id', 'unknown')}: {str(e)}")
+        return record
+
+
 def main(args):
     # 验证输入目录和文件
     if not os.path.isdir(args.structure_path):
@@ -167,47 +197,47 @@ def main(args):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-    # 处理输入JSONL并生成输出
-    with open(args.input_jsonl, 'r', encoding='utf-8') as infile, \
-         open(args.output_jsonl, 'w', encoding='utf-8') as outfile:
-
+    # 读取所有记录
+    records = []
+    with open(args.input_jsonl, 'r', encoding='utf-8') as infile:
         for line_num, line in enumerate(infile):
             try:
-                # 解析输入JSONL记录
                 record = json.loads(line)
-                instance_id = record.get('instance_id')
-                if not instance_id:
-                    print(f"Warning: Missing instance_id in line {line_num+1}, skipping")
-                    continue
-
-                # 查找对应的仓库JSON文件
-                json_filename = f"{instance_id}.json"
-                json_path = os.path.join(args.structure_path, json_filename)
-
-                if not os.path.isfile(json_path):
-                    print(f"Warning: JSON file not found for {instance_id}, skipping")
-                    # 仍将原始记录写入输出
-                    json.dump(record, outfile, ensure_ascii=False)
-                    outfile.write('\n')
-                    continue
-
-                # 处理仓库排序
-                ranking_result = process_repo_json(json_path, args.max_quantity)
-
-                if ranking_result:
-                    # 添加排序信息到记录
-                    record['ranker_info'] = ranking_result
-
-                # 写入输出文件
-                json.dump(record, outfile, ensure_ascii=False)
-                outfile.write('\n')
-
+                records.append(record)
             except json.JSONDecodeError:
                 print(f"Warning: Invalid JSON in line {line_num+1}, skipping")
                 continue
-            except Exception as e:
-                print(f"Error processing line {line_num+1}: {str(e)}")
-                continue
+    # 测试用例
+    records = records[:10]
+    # 使用多线程处理记录
+    max_workers = min(5, (os.cpu_count() or 1) + 4)
+    processed_records = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_record = {
+            executor.submit(process_single_record, record, args.structure_path, args.max_quantity): record
+            for record in records
+        }
+        
+        # 处理完成的任务并显示进度条
+        with tqdm(total=len(records), desc="Processing repositories", unit="repo") as pbar:
+            for future in as_completed(future_to_record):
+                try:
+                    processed_record = future.result()
+                    processed_records.append(processed_record)
+                except Exception as e:
+                    original_record = future_to_record[future]
+                    print(f"Error processing record {original_record.get('instance_id', 'unknown')}: {str(e)}")
+                    processed_records.append(original_record)
+                finally:
+                    pbar.update(1)
+
+    # 写入输出文件
+    with open(args.output_jsonl, 'w', encoding='utf-8') as outfile:
+        for record in processed_records:
+            json.dump(record, outfile, ensure_ascii=False)
+            outfile.write('\n')
 
     print(f"Processing complete. Output saved to {args.output_jsonl}")
 

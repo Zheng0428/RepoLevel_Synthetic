@@ -15,6 +15,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
 
         # 构造排序提示
         prompt = utils.script_ranker_prompt(repo_data['structure'])
+        return None
         if not prompt:
             print(f"Failed to generate prompt for {repo_name}")
             return None
@@ -101,6 +102,7 @@ def main(args):
 
                 # 处理仓库排序
                 ranking_result = process_repo_json(json_path, args.max_quantity)
+                continue
                 if ranking_result:
                     # 添加排序信息到记录
                     record['ranker_info'] = ranking_result

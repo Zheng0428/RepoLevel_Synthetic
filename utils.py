@@ -1541,7 +1541,13 @@ def script_ranker_prompt(structure: dict) -> dict:
     Returns:
         dict: 键为文件路径，值为处理后的文件内容（函数体被替换为占位符）
     """
-    return extract_python_files_without_tests(structure)
+    file_content_dic = extract_python_files_without_tests(structure)
+    for key, value in file_content_dic.items():
+        print (value)
+        break
+    
+
+    return file_content_dic
 
 def extract_python_files_without_tests(structure, current_path="") -> dict:
     """
@@ -1571,7 +1577,7 @@ def extract_python_files_without_tests(structure, current_path="") -> dict:
                 file_path = f"{current_path}/{name}" if current_path else name
                 
                 # 检查是否为.py文件且路径不包含test
-                if name.endswith('.py') and 'test' not in file_path.lower():
+                if name.endswith('.py') and 'test' not in file_path and '__init__' not in file_path:
                     try:
                         # 获取原始文件内容
                         file_lines = content.get("text", [])

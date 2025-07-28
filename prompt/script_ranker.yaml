@@ -13,7 +13,7 @@ prompt_template: |
 
     ## Requirements:
     1. **Only list important scripts** - skip trivial files, wrapper libraries, or simple configuration files
-    2. **List dependencies only** - for each important script, list only the files it imports or depends on
+    2. **List dependencies only** - for each important script, list only the Python files it imports or depends on
     3. **Order by importance** - files will be extracted in the order they appear (most important first)
     4. **Skip unimportant files** - configuration files, simple wrappers, standard library usage, etc.
 
@@ -21,7 +21,7 @@ prompt_template: |
     ===RANKING_START===
     ===FILE_START===
     FILE_PATH: [full file path]
-    DEPENDENCIES: [list of files this script imports or depends on - only direct dependencies]
+    DEPENDENCIES: [list of Python files this script imports or depends on]
     IMPORTANCE_SCORE: [float from 0.0 to 1.0 indicating how important/complex this script is]
     REASONING: [detailed explanation of why this script is important - focus on complexity, potential bugs, or critical logic]
     ===FILE_END===
@@ -36,3 +36,4 @@ prompt_template: |
     - Skip test files
     - Skip files with only simple data structures or constants
     - Focus on files with actual implementation logic
+    - Only include Python (.py) files in dependencies list

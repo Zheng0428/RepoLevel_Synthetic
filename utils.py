@@ -1591,7 +1591,7 @@ def extract_python_files_without_tests(structure, current_path="") -> dict:
                 file_path = f"{current_path}/{name}" if current_path else name
                 
                 # 检查是否为.py文件且路径不包含test
-                if name.endswith('.py') and 'test' not in file_path and '__init__' not in file_path:
+                if name.endswith('.py') and 'test' not in file_path:
                     try:
                         # 获取原始文件内容
                         file_lines = content.get("text", [])

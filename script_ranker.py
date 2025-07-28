@@ -23,8 +23,8 @@ def validate_dependencies(ranking_results: dict, valid_files: list) -> dict:
         
         # 如果有不存在的依赖项被移除，打印日志
         removed_deps = set(original_deps) - set(valid_deps)
-        if removed_deps:
-            print(f"Removed non-existent dependencies for {file_path}: {removed_deps}")
+        # if removed_deps:
+        #     print(f"Removed non-existent dependencies for {file_path}: {removed_deps}")
         
         # 更新依赖列表
         cleaned_info['dependencies'] = valid_deps

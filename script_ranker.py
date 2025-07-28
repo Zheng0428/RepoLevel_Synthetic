@@ -15,13 +15,16 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
 
         # 构造排序提示
         prompt = utils.script_ranker_prompt(repo_data['structure'])
-        return None
         if not prompt:
             print(f"Failed to generate prompt for {repo_name}")
             return None
 
         # 获取LLM响应
-        response = utils.get_llm_response(prompt, temperature=0.3)
+        len_prompt = len(prompt)
+        if len_prompt > 100000:
+            print(f"Prompt too long for {repo_name}, skipping")
+            return None
+        response = utils.get_llm_response(prompt, temperature=0.7)
         if not response:
             print(f"No response from LLM for {repo_name}")
             return None
@@ -32,11 +35,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
             print(f"Failed to extract ranking for {repo_name}")
             return None
 
-        return {
-            "repo_name": repo_name,
-            "ranking": ranking_results,
-            "raw_response": response
-        }
+        return ranking_results
     except Exception as e:
         print(f"Error processing {json_path}: {str(e)}")
         return None
@@ -102,7 +101,7 @@ def main(args):
 
                 # 处理仓库排序
                 ranking_result = process_repo_json(json_path, args.max_quantity)
-                continue
+
                 if ranking_result:
                     # 添加排序信息到记录
                     record['ranker_info'] = ranking_result

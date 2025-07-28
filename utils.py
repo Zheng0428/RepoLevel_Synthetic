@@ -1556,7 +1556,7 @@ def script_ranker_prompt(structure: dict) -> str:
     
     template = read_yaml('script_ranker')
     ranker_prompt = template['prompt_template'].format(
-        content=code_content,
+        repository_structure=code_content,
     )
 
     return ranker_prompt

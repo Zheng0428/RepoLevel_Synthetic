@@ -1530,13 +1530,208 @@ def construct_buggy_prompt(task: dict) -> str:
     )
     return formatted_prompt
 
-# script ranker prompt
-def script_ranker_prompt(structure: dict) -> str:
-    repo_file_contents, _, _ = get_full_file_paths_and_classes_and_functions(
-        structure
-    )
-    return repo_file_contents
+# ================== script ranker prompt ==================
+def script_ranker_prompt(structure: dict) -> dict:
+    """
+    从repository结构中提取所有.py文件（排除test文件），并移除函数内容。
+    
+    Args:
+        structure: 表示repository结构的字典
+        
+    Returns:
+        dict: 键为文件路径，值为处理后的文件内容（函数体被替换为占位符）
+    """
+    return extract_python_files_without_tests(structure)
 
+def extract_python_files_without_tests(structure, current_path="") -> dict:
+    """
+    递归遍历repository结构，提取所有.py文件（排除包含test的文件），
+    并移除函数和类方法的内容。
+    
+    Args:
+        structure: 表示repository结构的字典
+        current_path: 当前路径（用于递归）
+        
+    Returns:
+        dict: 键为文件路径，值为处理后的文件内容
+    """
+    result = {}
+    
+    for name, content in structure.items():
+        if isinstance(content, dict):
+            # 检查是否为文件节点（包含text、classes、functions键）
+            is_file_node = (
+                "text" in content and 
+                isinstance(content.get("text"), list) and
+                ("classes" in content or "functions" in content)
+            )
+            
+            if is_file_node:
+                # 这是一个Python文件节点
+                file_path = f"{current_path}/{name}" if current_path else name
+                
+                # 检查是否为.py文件且路径不包含test
+                if name.endswith('.py') and 'test' not in file_path.lower():
+                    try:
+                        # 获取原始文件内容
+                        file_lines = content.get("text", [])
+                        file_content = '\n'.join(file_lines)
+                        
+                        # 使用AST解析并移除函数内容
+                        processed_content = remove_function_bodies(file_content)
+                        result[file_path] = processed_content
+                        
+                    except Exception as e:
+                        # 如果解析失败，使用原始内容但移除空行
+                        file_lines = content.get("text", [])
+                        file_content = '\n'.join([line for line in file_lines if line.strip()])
+                        result[file_path] = file_content
+                        
+            else:
+                # 这是一个目录，继续递归
+                next_path = f"{current_path}/{name}" if current_path else name
+                sub_result = extract_python_files_without_tests(content, next_path)
+                result.update(sub_result)
+    
+    return result
+
+def remove_function_bodies(file_content: str) -> str:
+    """
+    使用AST解析Python文件内容，移除所有函数和类方法的内容，用占位符代替。
+    
+    Args:
+        file_content: 原始Python文件内容
+        
+    Returns:
+        str: 处理后的文件内容，函数体被替换为"# ... function body ..."
+    """
+    try:
+        import ast
+        tree = ast.parse(file_content)
+        lines = file_content.splitlines()
+        
+        # 收集所有需要替换的函数/方法范围
+        replace_ranges = []
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+                # 找到函数定义的起始和结束行
+                start_line = node.lineno - 1
+                
+                # 找到函数体的起始位置（冒号后的下一行）
+                func_def_line = lines[start_line]
+                colon_pos = func_def_line.rfind(':')
+                
+                if colon_pos != -1:
+                    # 如果冒号在同一行，函数体从下一行开始
+                    body_start = start_line + 1
+                else:
+                    # 如果冒号在下一行，需要找到它
+                    for i in range(start_line, len(lines)):
+                        if ':' in lines[i]:
+                            body_start = i + 1
+                            break
+                    else:
+                        body_start = start_line + 1
+                
+                # 函数体结束位置
+                body_end = node.end_lineno if hasattr(node, 'end_lineno') else len(lines)
+                
+                # 添加替换范围
+                replace_ranges.append((body_start, body_end))
+            
+            elif isinstance(node, ast.ClassDef):
+                # 处理类中的方法
+                for method in node.body:
+                    if isinstance(method, ast.FunctionDef) or isinstance(method, ast.AsyncFunctionDef):
+                        start_line = method.lineno - 1
+                        
+                        # 找到方法体的起始位置
+                        method_def_line = lines[start_line]
+                        colon_pos = method_def_line.rfind(':')
+                        
+                        if colon_pos != -1:
+                            body_start = start_line + 1
+                        else:
+                            for i in range(start_line, len(lines)):
+                                if ':' in lines[i]:
+                                    body_start = i + 1
+                                    break
+                            else:
+                                body_start = start_line + 1
+                        
+                        body_end = method.end_lineno if hasattr(method, 'end_lineno') else len(lines)
+                        replace_ranges.append((body_start, body_end))
+        
+        # 按行号降序排序，避免替换时影响后续索引
+        replace_ranges.sort(key=lambda x: x[0], reverse=True)
+        
+        # 执行替换
+        for start, end in replace_ranges:
+            # 计算缩进
+            if start < len(lines):
+                indent = len(lines[start]) - len(lines[start].lstrip())
+                placeholder = ' ' * indent + '# ... function body ...'
+            else:
+                placeholder = '# ... function body ...'
+            
+            # 替换函数体
+            lines[start:end] = [placeholder]
+        
+        return '\n'.join(lines)
+        
+    except Exception:
+        # 如果AST解析失败，使用简单的正则表达式方法
+        import re
+        
+        # 匹配函数定义的正则表达式
+        func_pattern = r'^(\s*)(def|async def)\s+\w+\s*\([^)]*\)\s*:.*$'
+        
+        lines = file_content.splitlines()
+        i = 0
+        result_lines = []
+        
+        while i < len(lines):
+            line = lines[i]
+            match = re.match(func_pattern, line)
+            
+            if match:
+                # 找到函数定义
+                indent = len(match.group(1))
+                result_lines.append(line)
+                
+                # 跳过函数体
+                i += 1
+                body_indent = None
+                
+                while i < len(lines):
+                    next_line = lines[i]
+                    if next_line.strip() == '':
+                        # 空行，继续
+                        i += 1
+                        continue
+                    
+                    # 计算当前行的缩进
+                    curr_indent = len(next_line) - len(next_line.lstrip())
+                    
+                    if body_indent is None:
+                        body_indent = curr_indent
+                    
+                    if curr_indent <= indent and next_line.strip():
+                        # 缩进减少，函数体结束
+                        break
+                    
+                    i += 1
+                
+                # 添加占位符
+                placeholder = ' ' * (indent + 4) + '# ... function body ...'
+                result_lines.append(placeholder)
+            else:
+                result_lines.append(line)
+                i += 1
+        
+        return '\n'.join(result_lines)
+# ================== script ranker prompt done ==================
 
 def parse_python_file(file_path, file_content=None):
     """Parse a Python file to extract class and function definitions with their line numbers.

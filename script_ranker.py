@@ -14,7 +14,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
         print(f"Processing repository: {repo_name}")
 
         # 构造排序提示
-        prompt = utils.script_ranker_prompt(repo_data)
+        prompt = utils.script_ranker_prompt(repo_data['structure'])
         if not prompt:
             print(f"Failed to generate prompt for {repo_name}")
             return None
@@ -83,7 +83,7 @@ def main(args):
             try:
                 # 解析输入JSONL记录
                 record = json.loads(line)
-                instance_id = record.get('data', {}).get('instance_id')
+                instance_id = record.get('instance_id')
                 if not instance_id:
                     print(f"Warning: Missing instance_id in line {line_num+1}, skipping")
                     continue
@@ -126,11 +126,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--max_quantity', type=int, default=5,
                         help='Maximum number of scripts to rank (default: 5)')
-    parser.add_argument('--structure_path', required=True,
+    parser.add_argument('--structure_path', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/true_repo_structure',
                         help='Path to directory containing repository JSON files')
-    parser.add_argument('--input_jsonl', required=True,
+    parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl',
                         help='Path to input JSONL file containing instance_id mapping')
-    parser.add_argument('--output_jsonl', required=True,
+    parser.add_argument('--output_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
                         help='Path to output JSONL file with ranking information')
     args = parser.parse_args()
     main(args)

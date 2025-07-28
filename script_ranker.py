@@ -44,17 +44,37 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
 def extract_ranking(response: str, max_quantity: int) -> list:
     """从LLM响应中提取并验证排序结果"""
     try:
-        # 尝试JSON解析
-        ranking = json.loads(response)
-        if not isinstance(ranking, list):
-            raise ValueError("Ranking result must be a list")
-        return ranking[:max_quantity]
-    except json.JSONDecodeError:
-        # 尝试正则表达式提取
         import re
-        pattern = r'\d+\.\s*([^\n]+)'
-        matches = re.findall(pattern, response)
-        return matches[:max_quantity] if matches else None
+        
+        # 提取===RANKING_START===和===RANKING_END===之间的内容
+        ranking_pattern = r'===RANKING_START===(.*?)===RANKING_END==='
+        ranking_match = re.search(ranking_pattern, response, re.DOTALL)
+        if not ranking_match:
+            print("No ranking section found in response")
+            return None
+            
+        ranking_content = ranking_match.group(1)
+        
+        # 提取所有FILE_START块
+        file_pattern = r'===FILE_START===(.*?)===FILE_END==='
+        file_matches = re.findall(file_pattern, ranking_content, re.DOTALL)
+        
+        if not file_matches:
+            print("No file entries found in ranking")
+            return None
+            
+        results = []
+        for file_content in file_matches[:max_quantity]:
+            # 提取FILE_PATH
+            path_pattern = r'FILE_PATH:\s*(.+?)(?=\n|$)'
+            path_match = re.search(path_pattern, file_content.strip())
+            
+            if path_match:
+                file_path = path_match.group(1).strip()
+                results.append(file_path)
+        
+        return results if results else None
+        
     except Exception as e:
         print(f"Error extracting ranking: {str(e)}")
         return None

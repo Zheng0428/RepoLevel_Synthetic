@@ -1604,12 +1604,13 @@ def extract_python_files_without_tests(structure, current_path="") -> dict:
 def remove_function_bodies(file_content: str) -> str:
     """
     使用AST解析Python文件内容，移除所有函数和类方法的内容，用占位符代替。
+    但保留main()函数和if __name__ == "__main__":块的内容。
     
     Args:
         file_content: 原始Python文件内容
         
     Returns:
-        str: 处理后的文件内容，函数体被替换为"# ... function body ..."
+        str: 处理后的文件内容，普通函数体被替换为"# ... function body ..."
     """
     try:
         import ast
@@ -1619,20 +1620,60 @@ def remove_function_bodies(file_content: str) -> str:
         # 收集所有需要替换的函数/方法范围
         replace_ranges = []
         
+        # 检查是否是main函数或__main__块
+        def should_preserve_function(node):
+            """检查是否应该保留函数内容"""
+            if isinstance(node, ast.FunctionDef):
+                return node.name == 'main'
+            elif isinstance(node, ast.AsyncFunctionDef):
+                return node.name == 'main'
+            return False
+        
+        # 检查是否是if __name__ == "__main__"块
+        def find_main_guard_statements(tree):
+            """找到if __name__ == "__main__":语句的范围"""
+            main_guard_ranges = []
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.If):
+                    # 检查条件是否为 __name__ == "__main__"
+                    if (isinstance(node.test, ast.Compare) and
+                        isinstance(node.test.left, ast.Name) and
+                        node.test.left.id == '__name__' and
+                        len(node.test.ops) == 1 and
+                        isinstance(node.test.ops[0], ast.Eq) and
+                        len(node.test.comparators) == 1 and
+                        isinstance(node.test.comparators[0], ast.Constant) and
+                        node.test.comparators[0].value == '__main__'):
+                        
+                        # 找到if语句的起始和结束行
+                        start_line = node.lineno - 1
+                        body_end = node.end_lineno if hasattr(node, 'end_lineno') else len(lines)
+                        
+                        # 保留整个if块
+                        main_guard_ranges.append((start_line, body_end))
+            
+            return main_guard_ranges
+        
+        # 找到所有需要保留的main guard范围
+        preserved_main_guards = find_main_guard_statements(tree)
+        
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # 检查是否应该保留这个函数
+                if should_preserve_function(node):
+                    continue  # 跳过main函数，不添加到替换范围
+                
                 # 找到函数定义的起始和结束行
                 start_line = node.lineno - 1
                 
-                # 找到函数体的起始位置（冒号后的下一行）
+                # 找到函数体的起始位置
                 func_def_line = lines[start_line]
                 colon_pos = func_def_line.rfind(':')
                 
                 if colon_pos != -1:
-                    # 如果冒号在同一行，函数体从下一行开始
                     body_start = start_line + 1
                 else:
-                    # 如果冒号在下一行，需要找到它
                     for i in range(start_line, len(lines)):
                         if ':' in lines[i]:
                             body_start = i + 1
@@ -1640,16 +1681,26 @@ def remove_function_bodies(file_content: str) -> str:
                     else:
                         body_start = start_line + 1
                 
-                # 函数体结束位置
                 body_end = node.end_lineno if hasattr(node, 'end_lineno') else len(lines)
                 
-                # 添加替换范围
-                replace_ranges.append((body_start, body_end))
+                # 检查是否与main guard重叠
+                should_skip = False
+                for guard_start, guard_end in preserved_main_guards:
+                    if start_line >= guard_start and body_end <= guard_end:
+                        should_skip = True
+                        break
+                
+                if not should_skip:
+                    replace_ranges.append((body_start, body_end))
             
             elif isinstance(node, ast.ClassDef):
                 # 处理类中的方法
                 for method in node.body:
-                    if isinstance(method, ast.FunctionDef) or isinstance(method, ast.AsyncFunctionDef):
+                    if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        # 检查是否应该保留这个方法
+                        if should_preserve_function(method):
+                            continue
+                        
                         start_line = method.lineno - 1
                         
                         # 找到方法体的起始位置
@@ -1667,7 +1718,16 @@ def remove_function_bodies(file_content: str) -> str:
                                 body_start = start_line + 1
                         
                         body_end = method.end_lineno if hasattr(method, 'end_lineno') else len(lines)
-                        replace_ranges.append((body_start, body_end))
+                        
+                        # 检查是否与main guard重叠
+                        should_skip = False
+                        for guard_start, guard_end in preserved_main_guards:
+                            if start_line >= guard_start and body_end <= guard_end:
+                                should_skip = True
+                                break
+                        
+                        if not should_skip:
+                            replace_ranges.append((body_start, body_end))
         
         # 按行号降序排序，避免替换时影响后续索引
         replace_ranges.sort(key=lambda x: x[0], reverse=True)
@@ -1687,54 +1747,71 @@ def remove_function_bodies(file_content: str) -> str:
         return '\n'.join(lines)
         
     except Exception:
-        # 如果AST解析失败，使用简单的正则表达式方法
+        # 如果AST解析失败，使用正则表达式方法
         import re
         
-        # 匹配函数定义的正则表达式
-        func_pattern = r'^(\s*)(def|async def)\s+\w+\s*\([^)]*\)\s*:.*$'
-        
         lines = file_content.splitlines()
-        i = 0
         result_lines = []
+        i = 0
         
         while i < len(lines):
-            line = lines[i]
-            match = re.match(func_pattern, line)
+            line = lines[i].rstrip()
             
-            if match:
-                # 找到函数定义
-                indent = len(match.group(1))
+            # 检查是否是if __name__ == "__main__":块
+            if line.strip() == 'if __name__ == "__main__":':
+                # 保留整个__main__块
                 result_lines.append(line)
-                
-                # 跳过函数体
                 i += 1
-                body_indent = None
                 
+                # 找到整个块的范围
+                indent = len(line) - len(line.lstrip())
                 while i < len(lines):
                     next_line = lines[i]
-                    if next_line.strip() == '':
-                        # 空行，继续
-                        i += 1
-                        continue
-                    
-                    # 计算当前行的缩进
-                    curr_indent = len(next_line) - len(next_line.lstrip())
-                    
-                    if body_indent is None:
-                        body_indent = curr_indent
-                    
-                    if curr_indent <= indent and next_line.strip():
-                        # 缩进减少，函数体结束
+                    if next_line.strip() and not next_line.startswith(' ' * indent):
                         break
-                    
+                    result_lines.append(next_line)
                     i += 1
-                
-                # 添加占位符
-                placeholder = ' ' * (indent + 4) + '# ... function body ...'
-                result_lines.append(placeholder)
-            else:
+                continue
+            
+            # 检查是否是main函数定义
+            main_func_pattern = r'^\s*(def|async def)\s+main\s*\([^)]*\)\s*:'
+            if re.match(main_func_pattern, line):
+                # 保留main函数
                 result_lines.append(line)
                 i += 1
+                
+                # 找到main函数的范围
+                func_indent = len(line) - len(line.lstrip())
+                while i < len(lines):
+                    next_line = lines[i]
+                    if next_line.strip() and len(next_line) - len(next_line.lstrip()) <= func_indent and not next_line.startswith(' ' * (func_indent + 1)):
+                        break
+                    result_lines.append(next_line)
+                    i += 1
+                continue
+            
+            # 检查普通函数定义
+            func_pattern = r'^\s*(def|async def)\s+\w+\s*\([^)]*\)\s*:'
+            if re.match(func_pattern, line) and not re.match(main_func_pattern, line):
+                result_lines.append(line)
+                i += 1
+                
+                # 跳过函数体，添加占位符
+                func_indent = len(line) - len(line.lstrip())
+                placeholder = ' ' * (func_indent + 4) + '# ... function body ...'
+                result_lines.append(placeholder)
+                
+                # 跳过到函数结束
+                while i < len(lines):
+                    next_line = lines[i]
+                    if next_line.strip() and len(next_line) - len(next_line.lstrip()) <= func_indent and not next_line.startswith(' ' * (func_indent + 1)):
+                        break
+                    i += 1
+                continue
+            
+            # 普通行，直接添加
+            result_lines.append(line)
+            i += 1
         
         return '\n'.join(result_lines)
 # ================== script ranker prompt done ==================

@@ -42,7 +42,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
         with open(json_path, 'r', encoding='utf-8') as f:
             repo_data = json.load(f)
         repo_name = os.path.splitext(os.path.basename(json_path))[0]
-        print(f"Processing repository: {repo_name}")
+        # print(f"Processing repository: {repo_name}")
 
         # 构造排序提示
         prompt, valid_files = utils.script_ranker_prompt(repo_data['structure'])
@@ -207,8 +207,8 @@ def main(args):
             except json.JSONDecodeError:
                 print(f"Warning: Invalid JSON in line {line_num+1}, skipping")
                 continue
-    # 测试用例
-    records = records[:10]
+    # # 测试用例
+    # records = records[:10]
     # 使用多线程处理记录
     max_workers = min(5, (os.cpu_count() or 1) + 4)
     processed_records = []

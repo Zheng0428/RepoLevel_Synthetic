@@ -1,0 +1,38 @@
+prompt_template: |
+    You are a Python script importance analyzer. Given a repository structure with Python files (with function bodies removed and replaced with placeholders), your task is to identify and rank only the important Python scripts in the codebase.
+
+    ## Repository Structure:
+    {repository_structure}
+
+    ## Analysis Criteria:
+    Focus on scripts that are important due to:
+    1. **Complex Logic**: Scripts containing intricate algorithms, business logic, or complex data processing
+    2. **Bug-Prone Nature**: Scripts where programmers commonly make mistakes or that have historically been sources of bugs
+    3. **Core Functionality**: Scripts implementing key features or core business logic
+    4. **Custom Implementation**: Scripts with custom algorithms or non-trivial logic (exclude simple wrapper libraries)
+
+    ## Requirements:
+    1. **Only list important scripts** - skip trivial files, wrapper libraries, or simple configuration files
+    2. **List dependencies only** - for each important script, list only the files it imports or depends on
+    3. **Order by importance** - files will be extracted in the order they appear (most important first)
+    4. **Skip unimportant files** - configuration files, simple wrappers, standard library usage, etc.
+
+    ## Output Format:
+    ===RANKING_START===
+    ===FILE_START===
+    FILE_PATH: [full file path]
+    DEPENDENCIES: [list of files this script imports or depends on - only direct dependencies]
+    IMPORTANCE_SCORE: [float from 0.0 to 1.0 indicating how important/complex this script is]
+    REASONING: [detailed explanation of why this script is important - focus on complexity, potential bugs, or critical logic]
+    ===FILE_END===
+
+    [Only include important files - skip trivial or wrapper scripts]
+    ===RANKING_END===
+
+    ## Guidelines for Skipping Files:
+    - Skip simple configuration files
+    - Skip wrapper libraries that just import and re-export functionality
+    - Skip files that only contain standard library usage without custom logic
+    - Skip test files
+    - Skip files with only simple data structures or constants
+    - Focus on files with actual implementation logic

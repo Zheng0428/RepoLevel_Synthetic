@@ -1447,7 +1447,7 @@ def construct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: li
 def origin_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     return task_item['prompt']
 
-# retry unittest prompt
+# ================== retry unittest prompt==================
 def construct_unittest_prompt(task: dict) -> str:
     repo_path = DEFAULT_PATH
     instance_id = task.get('instance_id', 'unknown')
@@ -1531,23 +1531,35 @@ def construct_buggy_prompt(task: dict) -> str:
     return formatted_prompt
 
 # ================== script ranker prompt ==================
-def script_ranker_prompt(structure: dict) -> dict:
+def script_ranker_prompt(structure: dict) -> str:
     """
-    从repository结构中提取所有.py文件（排除test文件），并移除函数内容。
+    从repository结构中提取所有.py文件（排除test文件），并移除函数内容，
+    然后将结果格式化为字符串作为prompt输入。
     
     Args:
         structure: 表示repository结构的字典
         
     Returns:
-        dict: 键为文件路径，值为处理后的文件内容（函数体被替换为占位符）
+        str: 格式化的prompt字符串
     """
     file_content_dic = extract_python_files_without_tests(structure)
-    for key, value in file_content_dic.items():
-        print (value)
-        break
     
+    # 将字典格式化为字符串
+    code_content = ""
+    for file_path, content in file_content_dic.items():
+        code_content += f"===FILE_START===\n"
+        code_content += f"FILE_PATH: {file_path}\n"
+        code_content += f"===CODE_START===\n"
+        code_content += f"```python\n{content}\n```\n"
+        code_content += f"===CODE_END===\n"
+        code_content += f"===FILE_END===\n\n"
+    
+    template = read_yaml('script_ranker')
+    ranker_prompt = template['prompt_template'].format(
+        content=code_content,
+    )
 
-    return file_content_dic
+    return ranker_prompt
 
 def extract_python_files_without_tests(structure, current_path="") -> dict:
     """

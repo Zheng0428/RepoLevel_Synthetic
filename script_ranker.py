@@ -4,6 +4,35 @@ import utils
 from pathlib import Path
 
 
+def validate_dependencies(ranking_results: dict, valid_files: list) -> dict:
+    """验证并清理不存在的依赖项"""
+    if not ranking_results:
+        return ranking_results
+    
+    cleaned_results = {}
+    
+    for file_path, file_info in ranking_results.items():
+        # 创建新的文件信息副本
+        cleaned_info = file_info.copy()
+        
+        # 获取原始依赖列表
+        original_deps = file_info.get('dependencies', [])
+        
+        # 过滤掉不存在的依赖项
+        valid_deps = [dep for dep in original_deps if dep in valid_files]
+        
+        # 如果有不存在的依赖项被移除，打印日志
+        removed_deps = set(original_deps) - set(valid_deps)
+        if removed_deps:
+            print(f"Removed non-existent dependencies for {file_path}: {removed_deps}")
+        
+        # 更新依赖列表
+        cleaned_info['dependencies'] = valid_deps
+        cleaned_results[file_path] = cleaned_info
+    
+    return cleaned_results
+
+
 def process_repo_json(json_path: str, max_quantity: int) -> dict:
     """处理单个仓库JSON文件，生成排序结果"""
     try:
@@ -14,7 +43,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
         print(f"Processing repository: {repo_name}")
 
         # 构造排序提示
-        prompt = utils.script_ranker_prompt(repo_data['structure'])
+        prompt, valid_files = utils.script_ranker_prompt(repo_data['structure'])
         if not prompt:
             print(f"Failed to generate prompt for {repo_name}")
             return None
@@ -34,6 +63,9 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
         if not ranking_results:
             print(f"Failed to extract ranking for {repo_name}")
             return None
+
+        # 验证依赖项
+        ranking_results = validate_dependencies(ranking_results, valid_files)
 
         return ranking_results
     except Exception as e:

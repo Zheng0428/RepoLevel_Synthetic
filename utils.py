@@ -1758,7 +1758,9 @@ def remove_function_bodies(file_content: str) -> str:
             # 替换函数体
             lines[start:end] = [placeholder]
         
-        return '\n'.join(lines)
+        # 过滤掉以#开头的注释行
+        filtered_lines = [line for line in lines if not line.strip().startswith('#')]
+        return '\n'.join(filtered_lines)
         
     except Exception:
         # 如果AST解析失败，使用正则表达式方法
@@ -1827,7 +1829,9 @@ def remove_function_bodies(file_content: str) -> str:
             result_lines.append(line)
             i += 1
         
-        return '\n'.join(result_lines)
+        # 过滤掉以#开头的注释行
+        filtered_lines = [line for line in result_lines if not line.strip().startswith('#')]
+        return '\n'.join(filtered_lines)
 # ================== script ranker prompt done ==================
 
 def parse_python_file(file_path, file_content=None):

@@ -1531,7 +1531,7 @@ def construct_buggy_prompt(task: dict) -> str:
     return formatted_prompt
 
 # ================== script ranker prompt ==================
-def script_ranker_prompt(structure: dict) -> str:
+def script_ranker_prompt(structure: dict, truncate: int) -> str:
     """
     从repository结构中提取所有.py文件（排除test文件），并移除函数内容，
     然后将结果格式化为字符串作为prompt输入。
@@ -1545,14 +1545,13 @@ def script_ranker_prompt(structure: dict) -> str:
     """
     file_content_dic = extract_python_files_without_tests(structure)
     valid_files = list(file_content_dic.keys())
-    
-    # 将字典格式化为字符串
     code_content = ""
+    # 将字典格式化为字符串
     for file_path, content in file_content_dic.items():
         code_content += f"===FILE_START===\n"
         code_content += f"FILE_PATH: {file_path}\n"
         code_content += f"===CODE_START===\n"
-        code_content += f"```python\n{content}\n```\n"
+        code_content += f"```python\n{content[:truncate]}\n```\n"
         code_content += f"===CODE_END===\n"
         code_content += f"===FILE_END===\n\n"
     

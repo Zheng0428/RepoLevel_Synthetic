@@ -197,45 +197,94 @@ def main(args):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-    # 读取所有记录
-    records = []
+    # 读取现有输出文件中的记录（如果存在）
+    existing_records = {}
+    if os.path.isfile(args.output_jsonl):
+        print(f"Found existing output file: {args.output_jsonl}")
+        with open(args.output_jsonl, 'r', encoding='utf-8') as infile:
+            for line_num, line in enumerate(infile):
+                try:
+                    record = json.loads(line)
+                    instance_id = record.get('instance_id')
+                    if instance_id:
+                        # 检查是否已有有效的ranker_info
+                        if 'ranker_info' in record and record['ranker_info']:
+                            existing_records[instance_id] = record
+                        else:
+                            print(f"Record {instance_id} has no valid ranker_info, will reprocess")
+                except json.JSONDecodeError:
+                    print(f"Warning: Invalid JSON in existing file line {line_num+1}, skipping")
+                    continue
+
+    # 读取输入文件中的所有记录
+    all_records = {}
     with open(args.input_jsonl, 'r', encoding='utf-8') as infile:
         for line_num, line in enumerate(infile):
             try:
                 record = json.loads(line)
-                records.append(record)
+                instance_id = record.get('instance_id')
+                if instance_id:
+                    all_records[instance_id] = record
             except json.JSONDecodeError:
-                print(f"Warning: Invalid JSON in line {line_num+1}, skipping")
+                print(f"Warning: Invalid JSON in input file line {line_num+1}, skipping")
                 continue
-    # # 测试用例
-    # records = records[:10]
-    # 使用多线程处理记录
-    max_workers = min(5, (os.cpu_count() or 1) + 4)
-    processed_records = []
+
+    # 确定需要处理的记录
+    records_to_process = []
+    for instance_id, record in all_records.items():
+        if instance_id in existing_records:
+            # 使用已有的记录
+            records_to_process.append(existing_records[instance_id])
+        else:
+            # 需要重新处理
+            records_to_process.append(record)
+
+    # 过滤出需要重新处理的记录（没有有效ranker_info的）
+    need_reprocess = [r for r in records_to_process if not ('ranker_info' in r and r['ranker_info'])]
     
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有任务
-        future_to_record = {
-            executor.submit(process_single_record, record, args.structure_path, args.max_quantity): record
-            for record in records
-        }
+    if need_reprocess:
+        print(f"Processing {len(need_reprocess)} records that need reprocessing...")
         
-        # 处理完成的任务并显示进度条
-        with tqdm(total=len(records), desc="Processing repositories", unit="repo") as pbar:
-            for future in as_completed(future_to_record):
-                try:
-                    processed_record = future.result()
-                    processed_records.append(processed_record)
-                except Exception as e:
-                    original_record = future_to_record[future]
-                    print(f"Error processing record {original_record.get('instance_id', 'unknown')}: {str(e)}")
-                    processed_records.append(original_record)
-                finally:
-                    pbar.update(1)
+        # 使用多线程处理需要重新处理的记录
+        max_workers = min(5, (os.cpu_count() or 1) + 4)
+        reprocessed_records = []
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_record = {
+                executor.submit(process_single_record, record, args.structure_path, args.max_quantity): record
+                for record in need_reprocess
+            }
+            
+            # 处理完成的任务并显示进度条
+            with tqdm(total=len(need_reprocess), desc="Processing repositories", unit="repo") as pbar:
+                for future in as_completed(future_to_record):
+                    try:
+                        processed_record = future.result()
+                        reprocessed_records.append(processed_record)
+                    except Exception as e:
+                        original_record = future_to_record[future]
+                        print(f"Error processing record {original_record.get('instance_id', 'unknown')}: {str(e)}")
+                        reprocessed_records.append(original_record)
+                    finally:
+                        pbar.update(1)
+
+        # 更新记录列表
+        final_records = []
+        reprocessed_dict = {r['instance_id']: r for r in reprocessed_records}
+        
+        for record in records_to_process:
+            instance_id = record['instance_id']
+            if instance_id in reprocessed_dict:
+                final_records.append(reprocessed_dict[instance_id])
+            else:
+                final_records.append(record)
+    else:
+        print("All records already have valid ranker_info, skipping processing")
+        final_records = records_to_process
 
     # 写入输出文件
     with open(args.output_jsonl, 'w', encoding='utf-8') as outfile:
-        for record in processed_records:
+        for record in final_records:
             json.dump(record, outfile, ensure_ascii=False)
             outfile.write('\n')
 

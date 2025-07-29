@@ -61,8 +61,8 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
             if len(prompt) > 200000:
                 prompt, valid_files = utils.script_ranker_prompt(repo_data['structure'], truncate=100)
                 if len(prompt) > 200000:
-                    print(f"Prompt too long for {repo_name}, total {len(valid_files)} files and {len(prompt)} length, skipping")
-                    return None
+                    print(f"Prompt too long for {repo_name}, total {len(valid_files)} files and {len(prompt)} length")
+                    prompt, valid_files = utils.script_ranker_prompt(repo_data['structure'], truncate=10)
         response = utils.get_llm_response(prompt, temperature=0.7)
         if not response:
             print(f"No response from LLM for {repo_name}")
@@ -254,7 +254,7 @@ def main(args):
         print(f"Processing {len(need_reprocess)} records that need reprocessing...")
         
         # 使用多线程处理需要重新处理的记录
-        max_workers = min(10, (os.cpu_count() or 1) + 4)
+        max_workers = min(5, (os.cpu_count() or 1) + 4)
         reprocessed_records = []
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

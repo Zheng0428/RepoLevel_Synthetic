@@ -615,8 +615,8 @@ if __name__ == "__main__":
         with open(input_jsonl_file, 'r', encoding='utf-8') as infile:
             for line in infile:
                 data = json.loads(line)
-                if 'ranker_info' not in 
-                initial_tasks.append(json.loads(line))
+                if 'ranker_info' in data and data['ranker_info']:
+                    initial_tasks.append(data)
         logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")
     except FileNotFoundError:
         logger.error(f"FATAL: Initial data file not found at {input_jsonl_file}. Exiting.")

@@ -1618,6 +1618,7 @@ def remove_function_bodies(file_content: str) -> str:
     """
     使用AST解析Python文件内容，移除所有函数和类方法的内容，用占位符代替。
     但保留main()函数和if __name__ == "__main__":块的内容。
+    同时移除所有三引号注释（包括\"\"\"和\'\'\'）。
     
     Args:
         file_content: 原始Python文件内容
@@ -1625,6 +1626,37 @@ def remove_function_bodies(file_content: str) -> str:
     Returns:
         str: 处理后的文件内容，普通函数体被替换为"# ... function body ..."
     """
+    
+    def remove_docstrings_and_comments(content: str) -> str:
+        """移除所有三引号注释和文档字符串"""
+        import re
+        
+        # 移除三引号注释（非贪婪匹配）
+        # 匹配"""..."""和'''...'''
+        content = re.sub(r'(""".*?"""|\'\'\'.*?\'\'\')', '', content, flags=re.DOTALL)
+        
+        # 移除单行注释
+        lines = content.splitlines()
+        filtered_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped.startswith('#'):
+                # 移除行内的#注释，但要小心处理字符串中的#
+                # 使用正则表达式匹配不在字符串中的#
+                line_without_comment = re.sub(r'#.*$', '', line)
+                if line_without_comment.strip():
+                    filtered_lines.append(line_without_comment.rstrip())
+                else:
+                    filtered_lines.append('')
+            else:
+                filtered_lines.append('')
+        
+        return '\n'.join(filtered_lines)
+    
+    # 首先移除注释和文档字符串
+    file_content = remove_docstrings_and_comments(file_content)
+    
     try:
         import ast
         tree = ast.parse(file_content)
@@ -1757,20 +1789,26 @@ def remove_function_bodies(file_content: str) -> str:
             # 替换函数体
             lines[start:end] = [placeholder]
         
-        # 过滤掉以#开头的注释行
-        filtered_lines = [line for line in lines if not line.strip().startswith('#')]
+        # 过滤掉空行
+        filtered_lines = [line for line in lines if line.strip()]
         return '\n'.join(filtered_lines)
         
     except Exception:
         # 如果AST解析失败，使用正则表达式方法
         import re
         
+        # 再次确保移除注释
+        file_content = remove_docstrings_and_comments(file_content)
         lines = file_content.splitlines()
         result_lines = []
         i = 0
         
         while i < len(lines):
             line = lines[i].rstrip()
+            
+            if not line.strip():
+                i += 1
+                continue
             
             # 检查是否是if __name__ == "__main__":块
             if line.strip() == 'if __name__ == "__main__":':
@@ -1789,7 +1827,7 @@ def remove_function_bodies(file_content: str) -> str:
                 continue
             
             # 检查是否是main函数定义
-            main_func_pattern = r'^\s*(def|async def)\s+main\s*\([^)]*\)\s*:'
+            main_func_pattern = r'^\s*(def|async def)\s+main\s*\([^)]*\)\s*:.*'
             if re.match(main_func_pattern, line):
                 # 保留main函数
                 result_lines.append(line)
@@ -1806,7 +1844,7 @@ def remove_function_bodies(file_content: str) -> str:
                 continue
             
             # 检查普通函数定义
-            func_pattern = r'^\s*(def|async def)\s+\w+\s*\([^)]*\)\s*:'
+            func_pattern = r'^\s*(def|async def)\s+\w+\s*\([^)]*\)\s*:.*'
             if re.match(func_pattern, line) and not re.match(main_func_pattern, line):
                 result_lines.append(line)
                 i += 1
@@ -1828,8 +1866,8 @@ def remove_function_bodies(file_content: str) -> str:
             result_lines.append(line)
             i += 1
         
-        # 过滤掉以#开头的注释行
-        filtered_lines = [line for line in result_lines if not line.strip().startswith('#')]
+        # 过滤掉空行
+        filtered_lines = [line for line in result_lines if line.strip()]
         return '\n'.join(filtered_lines)
 # ================== script ranker prompt done ==================
 

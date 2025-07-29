@@ -39,6 +39,42 @@ def validate_dependencies(ranking_results: dict, valid_files: list) -> dict:
     return cleaned_results
 
 
+def validate_existing_ranker_info(record: dict, structure_path: str) -> dict:
+    """验证现有记录中的ranker_info，清理不存在的文件和依赖项"""
+    try:
+        instance_id = record.get('instance_id')
+        if not instance_id or 'ranker_info' not in record:
+            return record
+
+        # 查找对应的仓库JSON文件
+        json_filename = f"{instance_id}.json"
+        json_path = os.path.join(structure_path, json_filename)
+
+        if not os.path.isfile(json_path):
+            # 如果仓库文件不存在，清空ranker_info
+            record['ranker_info'] = {}
+            return record
+
+        # 读取仓库结构数据
+        with open(json_path, 'r', encoding='utf-8') as f:
+            repo_data = json.load(f)
+
+        # 获取有效文件列表
+        _, valid_files = utils.script_ranker_prompt(repo_data['structure'], truncate=10000)
+        
+        # 验证并清理ranker_info
+        if record['ranker_info']:
+            cleaned_ranker_info = validate_dependencies(record['ranker_info'], valid_files)
+            record['ranker_info'] = cleaned_ranker_info
+
+        return record
+    except Exception as e:
+        print(f"Error validating existing ranker_info for {record.get('instance_id', 'unknown')}: {str(e)}")
+        # 出错时清空ranker_info，让后续处理重新生成
+        record['ranker_info'] = {}
+        return record
+
+
 def process_repo_json(json_path: str, max_quantity: int) -> dict:
     """处理单个仓库JSON文件，生成排序结果"""
     try:
@@ -217,7 +253,13 @@ def main(args):
                     if instance_id:
                         # 检查是否已有有效的ranker_info
                         if 'ranker_info' in record and record['ranker_info']:
-                            existing_records[instance_id] = record
+                            # 验证现有记录的依赖关系
+                            validated_record = validate_existing_ranker_info(record, args.structure_path)
+                            # 如果验证后ranker_info为空，则标记为需要重新处理
+                            if validated_record['ranker_info']:
+                                existing_records[instance_id] = validated_record
+                            else:
+                                print(f"Record {instance_id} has invalid ranker_info after validation, will reprocess")
                         else:
                             print(f"Record {instance_id} has no valid ranker_info, will reprocess")
                 except json.JSONDecodeError:
@@ -241,7 +283,7 @@ def main(args):
     records_to_process = []
     for instance_id, record in all_records.items():
         if instance_id in existing_records:
-            # 使用已有的记录
+            # 使用已有的记录（已验证）
             records_to_process.append(existing_records[instance_id])
         else:
             # 需要重新处理

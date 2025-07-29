@@ -7,13 +7,17 @@ from tqdm import tqdm
 
 
 def validate_dependencies(ranking_results: dict, valid_files: list) -> dict:
-    """验证并清理不存在的依赖项"""
+    """验证并清理不存在的依赖项和文件路径"""
     if not ranking_results:
         return ranking_results
     
     cleaned_results = {}
     
     for file_path, file_info in ranking_results.items():
+        # 检查文件路径是否存在，不存在则跳过
+        if file_path not in valid_files:
+            continue
+            
         # 创建新的文件信息副本
         cleaned_info = file_info.copy()
         

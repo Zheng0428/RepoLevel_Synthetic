@@ -52,7 +52,7 @@ def process_repo_json(json_path: str, max_quantity: int) -> dict:
 
         # 获取LLM响应
         len_prompt = len(prompt)
-        if len_prompt > 100000:
+        if len_prompt > 200000:
             print(f"Prompt too long for {repo_name}, skipping")
             return None
         response = utils.get_llm_response(prompt, temperature=0.7)
@@ -251,7 +251,7 @@ if __name__ == "__main__":
                         help='Maximum number of scripts to rank (default: 5)')
     parser.add_argument('--structure_path', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/true_repo_structure',
                         help='Path to directory containing repository JSON files')
-    parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl',
+    parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/yiming/data/swe-bench-extra-message-good-20s-8k.jsonl',
                         help='Path to input JSONL file containing instance_id mapping')
     parser.add_argument('--output_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
                         help='Path to output JSONL file with ranking information')

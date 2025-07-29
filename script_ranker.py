@@ -296,8 +296,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Rank repository scripts by importance using LLM.')
 
-    parser.add_argument('--max_quantity', type=int, default=5,
-                        help='Maximum number of scripts to rank (default: 5)')
+    parser.add_argument('--max_quantity', type=int, default=10,
+                        help='Maximum number of scripts to rank (default: 10)')
     parser.add_argument('--structure_path', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/true_repo_structure',
                         help='Path to directory containing repository JSON files')
     parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/yiming/data/swe-bench-extra-message-good-20s-8k.jsonl',

@@ -593,24 +593,29 @@ if __name__ == "__main__":
                         help='Enable the retry mechanism for failed items. If not set, runs only once.')
     parser.add_argument('--restart', action='store_true',
                         help='Restart from saved checkpoint if available')
+    parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
+                        help='Path to input JSONL file containing instance_id mapping')
+    parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o.jsonl",
+                        help='Path to output JSONL file')
 
     args = parser.parse_args()
     
     start_time = time.time()
 
-    # --- Define output file ---
-    final_output_file = f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o.jsonl"
-
+    # --- Define intput and output file ---
+    final_output_file = args.output_jsonl
+    input_jsonl_file = args.input_jsonl
     # --- Load Initial Data ---
     # Always load initial data from the source file
-    initial_tasks = []
-    input_jsonl_file = f'{GENERATE_DATA_PATH}/gpt-4o-2024-11-20_yimi_three_shot_same_test.jsonl.tmp'
-    if not os.path.exists(input_jsonl_file):
-        print(f"Warning: Input file not found: {input_jsonl_file}. Skipping.")
-        input_jsonl_file = input_jsonl_file.replace(".tmp", "")
+    initial_tasks = []    
+    # if not os.path.exists(input_jsonl_file):
+    #     print(f"Warning: Input file not found: {input_jsonl_file}. Skipping.")
+    #     input_jsonl_file = input_jsonl_file.replace(".tmp", "")
     try:
         with open(input_jsonl_file, 'r', encoding='utf-8') as infile:
             for line in infile:
+                data = json.loads(line)
+                if 'ranker_info' not in 
                 initial_tasks.append(json.loads(line))
         logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")
     except FileNotFoundError:

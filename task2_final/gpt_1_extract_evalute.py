@@ -615,11 +615,13 @@ if __name__ == "__main__":
             for line in infile:
                 data = json.loads(line)
                 if 'ranker_info' in data and data['ranker_info']:
-                    for i, file_name, meta_data in en(data['ranker_info'].items()):
+                    # 使用 enumerate 遍历 ranker_info，从 1 开始计数
+                    for i, (file_name, meta_data) in enumerate(data['ranker_info'].items(), start=1):
                         new_data = data.copy()
-                        new_data['main_scirpt'] = file_name
-                        new_data['main_script_meta_data'] = meta_data
-                        new_data['main_script_meta_data']['rank'] = i
+                        # 修正拼写错误，将 'main_scirpt' 改为 'main_script'
+                        new_data['main_script'] = file_name
+                        new_data['main_script_metadata'] = meta_data
+                        new_data['main_script_metadata']['script_rank'] = i
                         new_data.pop('ranker_info')
                         initial_tasks.append(new_data)
         logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")

@@ -594,7 +594,7 @@ if __name__ == "__main__":
                         help='Restart from saved checkpoint if available')
     parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
                         help='Path to input JSONL file containing instance_id mapping')
-    parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o_ranker.jsonl",
+    parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_multiscript/gpt_2_finish_bug_gpt4o_ranker.jsonl",
                         help='Path to output JSONL file')
 
     args = parser.parse_args()
@@ -649,7 +649,6 @@ if __name__ == "__main__":
         logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
         logger.info(f"Already processed: {len(processed_ids)} tasks")
         logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")
-        
     else:
         # Normal initialization
         tasks_to_process = initial_tasks[:TEST_N]

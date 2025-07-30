@@ -1297,6 +1297,161 @@ def count_tokens(text: str, model_name: str = "gpt-4o") -> int:
     except:
         return 1000000
 
+
+def construct_three_shot_prompt_with_mutiscript(task_item: dict, repo_path: str, sample_data: list, template_path: str, structure: dict) -> str:
+    """
+    Args:
+        task_item: The current task item containing instance_id, repo info, patches, etc.
+        repo_path: Base path to the repository (already processed)
+        sample_data: List of successful sample tasks to use for examples
+        
+    Returns:
+        str: The reconstructed prompt, or empty string if reconstruction fails
+    """
+    try:
+        # file_content, _, _ = get_full_file_paths_and_classes_and_functions(
+        #     structure
+        # )
+        # repo_file_contents_dict = {path: lines for path, lines in file_content}
+        # logger.info(f"Starting prompt reconstruction for task {task_item.get('instance_id', 'unknown')}")
+        
+        # Load the template for three-shot mode
+        template = read_yaml(template_path)
+        if not template or 'prompt_template' not in template:
+            logger.error("Template not found or invalid for three_shot_same_test mode")
+            return ""
+        
+        # Get repository information
+        repo_name = task_item.get('repo', '').replace('/', '__') + '__' + task_item.get('base_commit', '')[:6]
+        source_testbed = os.path.join(repo_path, repo_name)
+        
+        if not os.path.exists(source_testbed):
+            logger.warning(f"Source testbed not found: {source_testbed}")
+            return ""
+        
+        # Extract current task's example information
+        example_problem_statement_1 = task_item.get('problem_statement', '')
+        
+        # Read buggy files directly from the processed repo
+        example_buggy_files_1 = ""
+        input_files = task_item.get('input_files', [])
+        
+        for file_path in input_files:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    example_buggy_files_1 += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+        
+        if not example_buggy_files_1:
+            logger.warning("No buggy files content found for current task")
+            return ""
+        
+        # Get two additional examples from sample_data
+        if len(sample_data) < 2:
+            logger.warning("Not enough sample data for three-shot prompt")
+            return ""
+        
+        # Randomly sample examples
+        available_samples = [s for s in sample_data if s.get('instance_id') != task_item.get('instance_id')]
+        if len(available_samples) < 2:
+            logger.warning("Not enough available samples for examples")
+            return ""
+        
+        random_samples = random.sample(available_samples, min(5, len(available_samples)))
+        candidate_examples = []
+        
+        for sample_item in random_samples:
+            try:
+                sample_problem_statement = sample_item.get('problem_statement', '')
+                sample_repo_name = sample_item.get('repo', '').replace('/', '__') + '__' + sample_item.get('base_commit', '')[:6]
+                sample_source_testbed = os.path.join(repo_path, sample_repo_name)
+                
+                if not os.path.exists(sample_source_testbed):
+                    continue
+                
+                # Read sample buggy files directly
+                sample_example_buggy_files = ""
+                sample_input_files = sample_item.get('input_files', [])
+                
+                for file_path in sample_input_files:
+                    sample_file_full_path = os.path.join(sample_source_testbed, file_path)
+                    if os.path.exists(sample_file_full_path):
+                        with open(sample_file_full_path, 'r', encoding='utf-8') as f:
+                            file_content = f.read()
+                            sample_example_buggy_files += f"**File Path:** {file_path}\n```python\n{file_content}\n```\n\n"
+                
+                if sample_example_buggy_files:
+                    candidate_examples.append({
+                        'problem_statement': sample_problem_statement,
+                        'buggy_files': sample_example_buggy_files,
+                        'buggy_files_length': len(sample_example_buggy_files)
+                    })
+                    
+            except Exception as e:
+                logger.warning(f"Error processing sample example: {e}")
+                continue
+        
+        # Select shortest two examples
+        if len(candidate_examples) < 2:
+            logger.warning("Not enough candidate examples generated")
+            return ""
+        
+        candidate_examples.sort(key=lambda x: x['buggy_files_length'])
+        selected_examples = candidate_examples[:2]
+        
+        # Get original code (clean version before bug)
+        
+        
+        # Read the original files from the repository (assuming they are the clean versions)
+        
+        main_script = task_item['main_script']
+        main_script_path = os.path.join(source_testbed, main_script)
+        if os.path.exists(main_script_path):
+            with open(main_script_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+                main_script_code = f"File Name: {main_script}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+
+
+
+        dependencies_script_code = ''
+        dependencies_script = task_item['main_script_metadata']['dependencies']
+        for file_path in dependencies_script:
+            full_file_path = os.path.join(source_testbed, file_path)
+            if os.path.exists(full_file_path):
+                with open(full_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    dependencies_script_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+        
+        # Build final prompt using template
+        prompt = template['prompt_template'].format(
+            main_script_code=main_script_code,
+            dependencies_script_code=dependencies_script_code,
+            example_problem_statement_1=example_problem_statement_1,
+            example_buggy_files_1=example_buggy_files_1,
+            example_problem_statement_2=selected_examples[0]['problem_statement'],
+            example_buggy_files_2=selected_examples[0]['buggy_files'],
+            example_problem_statement_3=selected_examples[1]['problem_statement'],
+            example_buggy_files_3=selected_examples[1]['buggy_files']
+        )
+        
+        # Check token limit
+        try:
+            if count_tokens(prompt) >= 100000:
+                logger.warning("Prompt exceeds token limit")
+                return ""
+        except Exception as e:
+            logger.warning(f"Error counting tokens: {e}")
+            return ""
+        
+        # logger.info(f"Successfully reconstructed prompt for task {task_item.get('instance_id', 'unknown')}")
+        return prompt
+        
+    except Exception as e:
+        logger.error(f"Error in prompt reconstruction: {e}")
+        return ""
+
     
 def construct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: list, template_path: str, structure: dict) -> str:
     """
@@ -1443,6 +1598,7 @@ def construct_three_shot_prompt(task_item: dict, repo_path: str, sample_data: li
     except Exception as e:
         logger.error(f"Error in prompt reconstruction: {e}")
         return ""
+
 
 def origin_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     return task_item['prompt']

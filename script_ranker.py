@@ -283,7 +283,7 @@ def main(args):
     records_to_process = []
     for instance_id, record in all_records.items():
         if instance_id in existing_records:
-            # 使用已有的记录（已验证）
+            # 使用已有的记录
             records_to_process.append(existing_records[instance_id])
         else:
             # 需要重新处理

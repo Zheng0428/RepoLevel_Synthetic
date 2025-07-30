@@ -777,7 +777,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             # logger.info(f"Successfully reconstructed prompt for task {task.get('instance_id', 'unknown')}")
             
             # Get a new response using the reconstructed prompt
-            print (len(reconstructed_prompt))
+            # print (len(reconstructed_prompt))
             new_response = get_model_resposne(reconstructed_prompt)
             if 'API request failed' in new_response:
                 logger.warning(f"API request failed for task {task.get('instance_id', 'unknown')}, using original")

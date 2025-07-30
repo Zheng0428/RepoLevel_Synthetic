@@ -535,7 +535,6 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     # 检查并重试不足的任务（同时获取最终测试结果）
     final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, max_retries=5)
     
-    # 移除重复的test_init调用
     logger.info("Successfully obtained final test results from retry process")
     
     # 根据最终init结果筛选有足够通过测试的任务
@@ -595,7 +594,7 @@ if __name__ == "__main__":
                         help='Restart from saved checkpoint if available')
     parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
                         help='Path to input JSONL file containing instance_id mapping')
-    parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o.jsonl",
+    parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_final/gpt_2_finish_bug_gpt4o_ranker.jsonl",
                         help='Path to output JSONL file')
 
     args = parser.parse_args()
@@ -616,7 +615,13 @@ if __name__ == "__main__":
             for line in infile:
                 data = json.loads(line)
                 if 'ranker_info' in data and data['ranker_info']:
-                    initial_tasks.append(data)
+                    for i, file_name, meta_data in en(data['ranker_info'].items()):
+                        new_data = data.copy()
+                        new_data['main_scirpt'] = file_name
+                        new_data['main_script_meta_data'] = meta_data
+                        new_data['main_script_meta_data']['rank'] = i
+                        new_data.pop('ranker_info')
+                        initial_tasks.append(new_data)
         logger.info(f"Successfully loaded {len(initial_tasks)} initial tasks from {input_jsonl_file}")
     except FileNotFoundError:
         logger.error(f"FATAL: Initial data file not found at {input_jsonl_file}. Exiting.")
@@ -665,7 +670,7 @@ if __name__ == "__main__":
         
         # Use ThreadPoolExecutor for concurrent requests with progress bar
         max_workers = min(CONC, len(tasks_to_process))
-        
+        print('Phase 1: Generate first round response')
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks with reconstruction
             future_to_task = {
@@ -693,7 +698,7 @@ if __name__ == "__main__":
             tasks_to_process = completed_tasks
         
         # Phase 1: Extract Patches from LLM responses
-        print('Phase 1: Extract Patches from LLM responses')
+        print('Phase 2: Extract Patches from LLM responses')
         extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
         
         # If nothing was extracted, all tasks failed parsing. Prepare them for the next retry.

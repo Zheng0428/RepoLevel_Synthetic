@@ -530,15 +530,6 @@ def check_and_retry_insufficient_tests(
     final_tasks = all_sufficient_tasks + current_tasks
     logger.info(f"Test evaluation with retries completed. Total sufficient tasks: {len(all_sufficient_tasks)}, remaining tasks after max retries: {len(current_tasks)}, total: {len(final_tasks)}")
     
-    # 构建与final_tasks对应的完整init结果
-    # final_init_results = {}
-    # for task in final_tasks:
-    #     instance_id = task['new_instance_id']
-    #     if instance_id in all_init_results:
-    #         final_init_results[instance_id] = all_init_results[instance_id]
-    #     else:
-    #         logger.warning(f"Task {instance_id} not found in any init results")
-    
     return final_tasks, all_init_results
 
 

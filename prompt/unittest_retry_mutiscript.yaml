@@ -2,7 +2,12 @@ prompt_template: |
     The previous unittest generation did not produce enough test cases (fewer than 5 passing tests were detected). You need to regenerate BOTH the buggy code and a much more comprehensive unittest file with extensive test coverage.
 
     ## Original Clean Code:
-    {original_code}
+    
+    ### Main Script:
+    {main_script_code}
+    
+    ### Dependencies Scripts:
+    {dependencies_script_code}
 
     ## Previous Problem Statement:
     {problem_statement}
@@ -45,15 +50,24 @@ prompt_template: |
 
     ===BUGGY_FILES_START===
     ===FILE_START===
-    FILE_PATH: [exact file path]
+    FILE_PATH: [exact file path of the main script]
     ===CODE_START===
     ```python
-    [complete buggy code for this file - refined version that may be more detectable]
+    [complete buggy code for the main script - refined version that may be more detectable]
     ```
     ===CODE_END===
     ===FILE_END===
 
-    [Repeat FILE_START/FILE_END blocks for additional files if necessary]
+    [Include for each modified dependencies script]
+    ===FILE_START===
+    FILE_PATH: [exact file path of dependencies script]
+    ===CODE_START===
+    ```python
+    [complete buggy code for dependencies script - only if changes are needed]
+    ```
+    ===CODE_END===
+    ===FILE_END===
+
     ===BUGGY_FILES_END===
 
     ===UNITTEST_FILE_START===
@@ -109,3 +123,6 @@ prompt_template: |
     - The enhanced unittest should provide confidence that the code works correctly
     - Make sure to maintain the original problem statement exactly as provided
     - Balance between bug detection and verification of unaffected functionality
+    - **Main Script is the primary focus**, but Dependencies Scripts can be modified if the bug logic requires it
+    - Dependencies Scripts may be empty if no dependencies exist
+    - **Support multiple dependencies scripts** - include all relevant files that need modification

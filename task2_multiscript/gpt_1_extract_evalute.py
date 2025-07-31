@@ -475,6 +475,12 @@ def check_and_retry_insufficient_tests(
     all_sufficient_tasks = []  # 移动到循环外部，用于累积所有通过的任务
     tasks_need_retry = []
     
+    # 用于存储所有任务的完整init结果
+    all_init_results = {}
+    
+    # 将初始结果添加到全局结果中
+    all_init_results.update(current_init_results)
+    
     while retry_count < max_retries and current_tasks:
         current_sufficient = []  # 重命名为current_sufficient，仅记录本轮通过的任务
         tasks_need_retry = []
@@ -515,12 +521,25 @@ def check_and_retry_insufficient_tests(
         current_tasks = retried_tasks
         current_init_results = retry_init_results
         
+        # 将重试结果也添加到全局结果中
+        all_init_results.update(retry_init_results)
+        
         logger.info(f"Retry {retry_count} phase completed. Tests re-evaluated for {len(retried_tasks)} tasks")
     
     # 合并结果
     final_tasks = all_sufficient_tasks + current_tasks
     logger.info(f"Test evaluation with retries completed. Total sufficient tasks: {len(all_sufficient_tasks)}, remaining tasks after max retries: {len(current_tasks)}, total: {len(final_tasks)}")
-    return final_tasks, current_init_results
+    
+    # 构建与final_tasks对应的完整init结果
+    final_init_results = {}
+    for task in final_tasks:
+        instance_id = task['new_instance_id']
+        if instance_id in all_init_results:
+            final_init_results[instance_id] = all_init_results[instance_id]
+        else:
+            logger.warning(f"Task {instance_id} not found in any init results")
+    
+    return final_tasks, final_init_results
 
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict]):

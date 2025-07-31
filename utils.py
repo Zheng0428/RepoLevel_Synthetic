@@ -1604,6 +1604,60 @@ def origin_prompt(task_item: dict, repo_path: str, sample_data: list) -> str:
     return task_item['prompt']
 
 # ================== retry unittest prompt==================
+def construct_unittest_prompt_with_mutiscript(task: dict) -> str:
+    repo_path = DEFAULT_PATH
+    instance_id = task.get('instance_id', 'unknown')
+    logger.info(f"Retrying unittest generation for task {instance_id}")
+    
+    # 构建重试prompt
+    repo_name = task.get('repo', '').replace('/', '__') + '__' + task.get('base_commit', '')[:6]
+    source_testbed = os.path.join(repo_path, repo_name)
+    
+    if not os.path.exists(source_testbed):
+        logger.warning(f"Source testbed not found: {source_testbed}")
+        return None
+    
+    main_script = task_item['main_script']
+    main_script_path = os.path.join(source_testbed, main_script)
+    if os.path.exists(main_script_path):
+        with open(main_script_path, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+            main_script_code = f"File Name: {main_script}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+
+
+
+    dependencies_script_code = ''
+    dependencies_script = task_item['main_script_metadata']['dependencies']
+    for file_path in dependencies_script:
+        full_file_path = os.path.join(source_testbed, file_path)
+        if os.path.exists(full_file_path):
+            with open(full_file_path, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+                dependencies_script_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
+    
+    if not original_code:
+        logger.warning(f"No original code found for task {instance_id}")
+        return None
+    
+    # 构建重试prompt
+    retry_template = read_yaml('unittest_retry_mutiscript')
+    if not retry_template or 'prompt_template' not in retry_template:
+        logger.error("unittest_retry template not found")
+        return None
+    
+    problem_statement = task.get('gpt_problem_statement', '')
+    if not problem_statement:
+        logger.warning(f"No problem statement found for task {instance_id}")
+        return None
+    
+    retry_prompt = retry_template['prompt_template'].format(
+        main_script_code=main_script_code,
+        dependencies_script_code=dependencies_script_code
+        problem_statement=problem_statement
+    )
+    return retry_prompt
+
+
 def construct_unittest_prompt(task: dict) -> str:
     repo_path = DEFAULT_PATH
     instance_id = task.get('instance_id', 'unknown')
@@ -2159,5 +2213,5 @@ def get_project_structure_from_scratch(
 
 if __name__ == "__main__":
     inputs = 'test'
-    response = get_deepseek_response(inputs)
+    response = get_llm_response(inputs)
     print(response)

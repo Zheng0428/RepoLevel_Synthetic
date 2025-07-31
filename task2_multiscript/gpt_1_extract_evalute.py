@@ -527,20 +527,17 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     Returns:
         The dictionary of analysis results.
     """
-    logger.info(f"=== Phase 2: Evaluating patches for {len(tasks_to_evaluate)} tasks ===")
-
-    # 第一次运行init测试
-    logger.info("Starting construct init state evaluation...")
+    logger.info("=== Phase 3.1 === Starting construct init state evaluation...")
     
     # 检查并重试不足的任务（同时获取最终测试结果）
-    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, max_retries=5)
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=2)
     
-    logger.info("Successfully obtained final test results from retry process")
+    # logger.info("Successfully obtained final test results from retry process")
     
     # 根据最终init结果筛选有足够通过测试的任务
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
-    logger.info("Starting GPT bug evaluation...")
+    logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")
     gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=TEST_N)
 
     # 分析结果
@@ -698,7 +695,7 @@ if __name__ == "__main__":
             # Update tasks_to_process with the completed tasks
             tasks_to_process = completed_tasks
         
-        # Phase 1: Extract Patches from LLM responses
+        # Phase 2: Extract Patches from LLM responses
         print('Phase 2: Extract Patches from LLM responses')
         extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
         
@@ -712,8 +709,8 @@ if __name__ == "__main__":
             ]
             continue
 
-        # Phase 2: Evaluate successfully extracted patches
-        print('Phase 2: Evaluate successfully extracted patches')
+        # Phase 3: Evaluate successfully extracted patches
+        print('Phase 3: Evaluate successfully extracted patches')
         analysis_results = run_evaluation_phase(extracted_tasks)
 
         # --- Process and Segregate Results of the Current Iteration ---

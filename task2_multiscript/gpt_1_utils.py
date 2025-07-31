@@ -16,9 +16,9 @@ from utils import fake_git_repo
 from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response
 from envs import DEFAULT_PATH, TRUE_PROJECT_FILE_LOC
 from utils import construct_three_shot_prompt_with_mutiscript as construct_prompt
-from utils import construct_unittest_prompt as construct_unittest_prompt
+from utils import construct_unittest_prompt_with_mutiscript as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
-CONC=2
+CONC=5
 TEST_N=10
 
 
@@ -769,7 +769,7 @@ def process_single_task_with_reconstruction(task: dict, all_perfect_tasks: list,
             task_item=task,
             repo_path=repo_path,
             sample_data=all_perfect_tasks,
-            template_path="three_shot",
+            template_path="multiscript_three_shot",
             structure = structure
         )
         

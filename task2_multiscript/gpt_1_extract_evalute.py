@@ -460,20 +460,47 @@ def run_extraction_phase(tasks: List[dict]) -> Tuple[List[dict], set]:
 
 def check_and_retry_insufficient_tests(
     tasks_to_evaluate: List[dict], 
-    threshold=5, 
-    max_retries=5
-) -> List[dict]:
+    threshold: int = 5, 
+    max_retries: int = 5,
+    load_history: bool = False
+) -> Tuple[List[dict], Dict[str, dict]]:
     """
     检查并重试测试不足的任务，包含完整的test_init调用和重试循环
+    
+    Args:
+        tasks_to_evaluate: 要评估的任务列表
+        threshold: 通过测试的最小数量阈值
+        max_retries: 最大重试次数
+        load_history: 是否直接读取历史信息，如果为True则直接返回历史信息
+    
+    Returns:
+        Tuple[List[dict], Dict[str, dict]]: (final_tasks, all_init_results)
     """
+    
+    # 历史文件路径
+    history_file = f"{EXP_PATH}/check_and_retry_history.json"
+    
+    # 如果load_history为True，尝试读取历史信息
+    if load_history:
+        logger.info("Loading history information...")
+        try:
+            if os.path.exists(history_file):
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    history_data = json.load(f)
+                logger.info("Successfully loaded history information")
+                return history_data.get('final_tasks', []), history_data.get('all_init_results', {})
+            else:
+                logger.warning("History file not found, starting fresh evaluation")
+        except Exception as e:
+            logger.error(f"Error loading history: {str(e)}, starting fresh evaluation")
+    
     logger.info(f"Starting test evaluation with up to {max_retries} retries...")
     
-    # 初始运行test_init获取基准结果（硬编码参数）
+    # 初始运行test_init获取基准结果
     current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=TEST_N)
     current_tasks = tasks_to_evaluate.copy()
     retry_count = 0
-    all_sufficient_tasks = []  # 移动到循环外部，用于累积所有通过的任务
-    tasks_need_retry = []
+    all_sufficient_tasks = []
     
     # 用于存储所有任务的完整init结果
     all_init_results = {}
@@ -481,8 +508,23 @@ def check_and_retry_insufficient_tests(
     # 将初始结果添加到全局结果中
     all_init_results.update(current_init_results)
     
+    # 存储初始状态
+    history_data = {
+        'final_tasks': [],
+        'all_init_results': all_init_results.copy(),
+        'iteration': 0
+    }
+    
+    # 保存初始状态
+    try:
+        os.makedirs(os.path.dirname(history_file), exist_ok=True)
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history_data, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save initial history: {str(e)}")
+    
     while retry_count < max_retries and current_tasks:
-        current_sufficient = []  # 重命名为current_sufficient，仅记录本轮通过的任务
+        current_sufficient = []
         tasks_need_retry = []
         
         for task in current_tasks:
@@ -495,7 +537,7 @@ def check_and_retry_insufficient_tests(
                 if passed_count < threshold:
                     tasks_need_retry.append(task)
                 else:
-                    current_sufficient.append(task)  # 添加到本轮通过列表
+                    current_sufficient.append(task)
             else:
                 logger.warning(f"Task {instance_id} not found in init results, adding to retry")
                 tasks_need_retry.append(task)
@@ -511,7 +553,7 @@ def check_and_retry_insufficient_tests(
         retry_count += 1
         logger.info(f"Retry attempt {retry_count}/{max_retries}: Retrying {len(tasks_need_retry)} insufficient tasks...")
         
-        # 重新生成任务（补充您要求的关键步骤）
+        # 重新生成任务
         retried_tasks = retry_tasks_in_parallel(tasks_need_retry, DEFAULT_PATH)
         
         # 对重新生成的任务执行test_init
@@ -524,11 +566,42 @@ def check_and_retry_insufficient_tests(
         # 将重试结果也添加到全局结果中
         all_init_results.update(retry_init_results)
         
+        # 合并当前结果
+        final_tasks = all_sufficient_tasks + current_tasks
+        
+        # 在每次循环中存储或更新final_tasks和all_init_results
+        history_data = {
+            'final_tasks': final_tasks,
+            'all_init_results': all_init_results.copy(),
+            'iteration': retry_count
+        }
+        
+        try:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, indent=2)
+            logger.info(f"Updated history file with iteration {retry_count} results")
+        except Exception as e:
+            logger.warning(f"Failed to update history: {str(e)}")
+        
         logger.info(f"Retry {retry_count} phase completed. Tests re-evaluated for {len(retried_tasks)} tasks")
     
-    # 合并结果
+    # 最终结果
     final_tasks = all_sufficient_tasks + current_tasks
     logger.info(f"Test evaluation with retries completed. Total sufficient tasks: {len(all_sufficient_tasks)}, remaining tasks after max retries: {len(current_tasks)}, total: {len(final_tasks)}")
+    
+    # 存储最终结果
+    history_data = {
+        'final_tasks': final_tasks,
+        'all_init_results': all_init_results.copy(),
+        'iteration': retry_count
+    }
+    
+    try:
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history_data, f, indent=2)
+        logger.info("Final results saved to history file")
+    except Exception as e:
+        logger.warning(f"Failed to save final history: {str(e)}")
     
     return final_tasks, all_init_results
 

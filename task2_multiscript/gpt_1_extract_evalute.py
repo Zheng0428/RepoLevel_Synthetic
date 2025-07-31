@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+import random
 
 # Local imports
 from envs import DEFAULT_PATH, GENERATE_DATA_PATH, LOG_PATH
@@ -75,6 +76,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     用于验证GPT生成的测试在修复状态下是否能通过
     """
     instance_id = instance['instance_id']
+    new_instance_id = instance['new_instance_id']
     repo = instance['repo']
     base_commit = instance['base_commit']
     repo_commit = get_repo_commit_name(repo, base_commit)
@@ -84,7 +86,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     test_patch = instance.get('test_patch', '')  # GPT生成的测试patch
     
     # 创建临时patch文件
-    init_test_patch_path = create_temp_patch_file(test_patch, GENERATE_DATA_PATH, instance_id, "init")
+    init_test_patch_path = create_temp_patch_file(test_patch, GENERATE_DATA_PATH, new_instance_id, "init")
     
     # 获取需要复制的文件
     original_patch_files = get_all_filenames(original_patch)
@@ -97,7 +99,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
     
     # 检查脚本是否存在
     if not os.path.exists(eval_sh):
-        return create_error_report(instance_id, f"Evaluation script not found: {eval_sh}")
+        return create_error_report(new_instance_id, f"Evaluation script not found: {eval_sh}")
     
     try:
         with TempTestbed(source_testbed=source_testbed, copy_files=files_to_copy) as temp_testbed:
@@ -110,7 +112,7 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
             # 确保使用绝对路径
             log_path = os.path.abspath(log_path)
             os.makedirs(log_path, exist_ok=True)
-            instance_log = os.path.join(log_path, f"{instance_id}.log")
+            instance_log = os.path.join(log_path, f"{new_instance_id}.log")
 
             # 运行测试
             cmd = f'bash {eval_sh} {temp_dir} "{test_command}" {init_test_patch_path}'
@@ -120,23 +122,23 @@ def eval_init_instance(instance: dict, log_path: str, timeout=100) -> dict:
             try:
                 # 运行命令并获取结果
                 success, timed_out = run_command_with_timeout(
-                    instance_id, cmd, timeout=timeout
+                    new_instance_id, cmd, timeout=timeout
                 )
                 
-                report = get_eval_report_synthetic(instance, instance_log, True)
-                report[instance_id]["timed_out"] = timed_out
-                report[instance_id]["success"] = success
+                report = get_eval_report_synthetic(instance, instance_log, True, new_instance_id)
+                report[new_instance_id]["timed_out"] = timed_out
+                report[new_instance_id]["success"] = success
                 
             except Exception as e:
-                report = create_error_report(instance_id, str(e))
+                report = create_error_report(new_instance_id, str(e))
                     
             end_time = time.time()
             duration = end_time - start_time
-            report[instance_id]["duration"] = duration
+            report[new_instance_id]["duration"] = duration
             
     except Exception as e:
-        logger.error(f"Error evaluating init instance {instance_id}: {str(e)}")
-        report = create_error_report(instance_id, str(e))
+        logger.error(f"Error evaluating init instance {new_instance_id}: {str(e)}")
+        report = create_error_report(new_instance_id, str(e))
     
     return report
 
@@ -163,6 +165,7 @@ def test_gpt_bug(tasks, max_workers, timeout):
 def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     """评估GPT生成的bug实例"""
     instance_id = instance['instance_id']
+    new_instance_id = instance['new_instance_id']
     repo = instance['repo']
     base_commit = instance['base_commit']
     repo_commit = get_repo_commit_name(repo, base_commit)
@@ -219,7 +222,7 @@ def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
                     instance_id, cmd, timeout=timeout
                 )
                 
-                report = get_eval_report_synthetic(instance, instance_log, True)
+                report = get_eval_report_synthetic(instance, instance_log, True, instance_id)
                 report[instance_id]["timed_out"] = timed_out
                 report[instance_id]["success"] = success
                 
@@ -367,7 +370,7 @@ def analyze_combined_results(init_results, gpt_bug_results):
 
 def filter_tasks_by_test_count(tasks: List[dict], init_results: dict, min_passed_tests: int = 5) -> Tuple[List[dict], dict]:
     """
-    根据init测试结果筛选有足够通过测试的任务
+    根据init测试结果筛选有足够通过测试的任务,比如10个任务，只有6个满足，则只保留满足条件的数据进行输出
     
     Args:
         tasks: 任务列表
@@ -382,7 +385,7 @@ def filter_tasks_by_test_count(tasks: List[dict], init_results: dict, min_passed
     filtered_init_results = {}
     
     for task in tasks:
-        instance_id = task['instance_id']
+        instance_id = task['new_instance_id']
         if instance_id in init_results:
             init_result = init_results[instance_id]
             passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
@@ -477,7 +480,7 @@ def check_and_retry_insufficient_tests(
         tasks_need_retry = []
         
         for task in current_tasks:
-            instance_id = task['instance_id']
+            instance_id = task['new_instance_id']
             if instance_id in current_init_results:
                 init_result = current_init_results[instance_id]
                 passed_tests = init_result.get('tests_status', {}).get('PASSED', [])
@@ -530,11 +533,11 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     logger.info("=== Phase 3.1 === Starting construct init state evaluation...")
     
     # 检查并重试不足的任务（同时获取最终测试结果）
-    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=2)
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=5)
     
     # logger.info("Successfully obtained final test results from retry process")
     
-    # 根据最终init结果筛选有足够通过测试的任务
+    # # 根据最终init结果筛选有足够通过测试的任务
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
     logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")
@@ -615,7 +618,9 @@ if __name__ == "__main__":
                     # 使用 enumerate 遍历 ranker_info，从 1 开始计数
                     for i, (file_name, meta_data) in enumerate(data['ranker_info'].items(), start=1):
                         new_data = data.copy()
-                        # 修正拼写错误，将 'main_scirpt' 改为 'main_script'
+                        random.seed(data['instance_id']+file_name)
+                        new_data['new_base_commit'] = ''.join(random.choices('0123456789abcdef', k=40))
+                        new_data['new_instance_id'] = new_data['repo'].replace("/", "__")+"__"+ new_data['new_base_commit'][:6]
                         new_data['main_script'] = file_name
                         new_data['main_script_metadata'] = meta_data
                         new_data['main_script_metadata']['script_rank'] = i

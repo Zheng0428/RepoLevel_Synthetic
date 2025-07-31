@@ -1617,28 +1617,21 @@ def construct_unittest_prompt_with_mutiscript(task: dict) -> str:
         logger.warning(f"Source testbed not found: {source_testbed}")
         return None
     
-    main_script = task_item['main_script']
+    main_script = task['main_script']
     main_script_path = os.path.join(source_testbed, main_script)
     if os.path.exists(main_script_path):
         with open(main_script_path, 'r', encoding='utf-8') as f:
             file_content = f.read()
             main_script_code = f"File Name: {main_script}\n\nFile Content:\n ```python\n{file_content}\n```\n"
 
-
-
     dependencies_script_code = ''
-    dependencies_script = task_item['main_script_metadata']['dependencies']
+    dependencies_script = task['main_script_metadata']['dependencies']
     for file_path in dependencies_script:
         full_file_path = os.path.join(source_testbed, file_path)
         if os.path.exists(full_file_path):
             with open(full_file_path, 'r', encoding='utf-8') as f:
                 file_content = f.read()
                 dependencies_script_code += f"File Name: {file_path}\n\nFile Content:\n ```python\n{file_content}\n```\n"
-    
-    if not original_code:
-        logger.warning(f"No original code found for task {instance_id}")
-        return None
-    
     # 构建重试prompt
     retry_template = read_yaml('unittest_retry_mutiscript')
     if not retry_template or 'prompt_template' not in retry_template:
@@ -1652,7 +1645,7 @@ def construct_unittest_prompt_with_mutiscript(task: dict) -> str:
     
     retry_prompt = retry_template['prompt_template'].format(
         main_script_code=main_script_code,
-        dependencies_script_code=dependencies_script_code
+        dependencies_script_code=dependencies_script_code,
         problem_statement=problem_statement
     )
     return retry_prompt

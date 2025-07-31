@@ -275,6 +275,7 @@ def get_eval_report_synthetic(
     data,
     test_log_path: str,
     include_tests_status: bool,
+    instance_id: str
 ) -> dict[str, Any]:
     """
     Generate a report of model evaluation results from a prediction, task instance,
@@ -289,7 +290,7 @@ def get_eval_report_synthetic(
     """
     report_map = {}
 
-    instance_id = data["instance_id"]
+    # instance_id = data["instance_id"]
     report_map[instance_id] = {
         "test_completed": False,
         "resolved": False,

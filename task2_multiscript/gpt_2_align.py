@@ -105,13 +105,13 @@ def process_data_entry(data, args, save_structure_dir):
         new_data = {}
         new_data['instance_id'] = data['instance_id']
         new_data['repo_base_name'] = os.path.join(data.get('repo').replace('/', '__') + '__' + data.get('base_commit')[:6])
-        new_data['origin_instance_id'] = data['instance_id']
+        # new_data['origin_instance_id'] = data['instance_id']
         new_data['origin_patch'] = data['patch']
         new_data['patch'] = data['gpt_patch']
         new_data['reserve_patch'] = data['gpt_reverse_patch']
         new_data['repo'] = data['repo']
-        new_data['base_commit'] = ''.join(random.choices('0123456789abcdef', k=40))
-        new_data['instance_id'] = new_data['repo'].replace("/", "__")+"__"+ new_data['base_commit'][:6]
+        # new_data['base_commit'] = ''.join(random.choices('0123456789abcdef', k=40))
+        # new_data['instance_id'] = new_data['repo'].replace("/", "__")+"__"+ new_data['base_commit'][:6]
         new_data['hints_text'] = data['hints_text']
         new_data['test_patch'] = data['test_patch']
         

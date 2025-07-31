@@ -531,15 +531,15 @@ def check_and_retry_insufficient_tests(
     logger.info(f"Test evaluation with retries completed. Total sufficient tasks: {len(all_sufficient_tasks)}, remaining tasks after max retries: {len(current_tasks)}, total: {len(final_tasks)}")
     
     # 构建与final_tasks对应的完整init结果
-    final_init_results = {}
-    for task in final_tasks:
-        instance_id = task['new_instance_id']
-        if instance_id in all_init_results:
-            final_init_results[instance_id] = all_init_results[instance_id]
-        else:
-            logger.warning(f"Task {instance_id} not found in any init results")
+    # final_init_results = {}
+    # for task in final_tasks:
+    #     instance_id = task['new_instance_id']
+    #     if instance_id in all_init_results:
+    #         final_init_results[instance_id] = all_init_results[instance_id]
+    #     else:
+    #         logger.warning(f"Task {instance_id} not found in any init results")
     
-    return final_tasks, final_init_results
+    return final_tasks, all_init_results
 
 
 def run_evaluation_phase(tasks_to_evaluate: List[dict]):
@@ -554,9 +554,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     # 检查并重试不足的任务（同时获取最终测试结果）
     final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=5)
     
-    # logger.info("Successfully obtained final test results from retry process")
-    
-    # # 根据最终init结果筛选有足够通过测试的任务
+    # # 根据最终init结果筛选有足够通过测试的任务，把不满足的删除
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
     logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")

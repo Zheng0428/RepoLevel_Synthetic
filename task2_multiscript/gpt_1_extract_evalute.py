@@ -478,7 +478,7 @@ def check_and_retry_insufficient_tests(
     """
     
     # 历史文件路径
-    history_file = f"{EXP_PATH}/check_and_retry_history.json"
+    history_file = f"{GENERATE_DATA_PATH}/check_and_retry_history.json"
     
     # 如果load_history为True，尝试读取历史信息
     if load_history:
@@ -497,7 +497,7 @@ def check_and_retry_insufficient_tests(
     logger.info(f"Starting test evaluation with up to {max_retries} retries...")
     
     # 初始运行test_init获取基准结果
-    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=TEST_N)
+    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=100)
     current_tasks = tasks_to_evaluate.copy()
     retry_count = 0
     all_sufficient_tasks = []
@@ -557,7 +557,7 @@ def check_and_retry_insufficient_tests(
         retried_tasks = retry_tasks_in_parallel(tasks_need_retry, DEFAULT_PATH)
         
         # 对重新生成的任务执行test_init
-        retry_init_results = test_init(retried_tasks, max_workers=CONC, timeout=TEST_N)
+        retry_init_results = test_init(retried_tasks, max_workers=CONC, timeout=100)
         
         # 更新当前任务和测试结果
         current_tasks = retried_tasks
@@ -606,7 +606,7 @@ def check_and_retry_insufficient_tests(
     return final_tasks, all_init_results
 
 
-def run_evaluation_phase(tasks_to_evaluate: List[dict]):
+def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     """
     Runs the full evaluation pipeline (init, gpt_bug) and analysis.
     
@@ -616,13 +616,14 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
     logger.info("=== Phase 3.1 === Starting construct init state evaluation...")
     
     # 检查并重试不足的任务（同时获取最终测试结果）
-    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=5)
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=7, load_history=load_history)
     
     # # 根据最终init结果筛选有足够通过测试的任务，把不满足的删除
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
     logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")
-    gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=TEST_N)
+    return None
+    gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=100)
 
     # 分析结果
     logger.info("Analyzing combined results...")
@@ -649,7 +650,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict]):
         retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC)
         
         # Re-evaluate the retried tasks
-        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=TEST_N)
+        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=100)
         
         # Merge retried results with original results
         for instance_id, result in retried_bug_results.items():
@@ -677,6 +678,8 @@ if __name__ == "__main__":
                         help='Path to input JSONL file containing instance_id mapping')
     parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_multiscript/gpt_2_finish_bug_gpt4o_ranker.jsonl",
                         help='Path to output JSONL file')
+    parser.add_argument('--load_history', type=bool, default=False, 
+                        help='whether load unittest test results from history')
 
     args = parser.parse_args()
     
@@ -754,51 +757,54 @@ if __name__ == "__main__":
         
         # Use ThreadPoolExecutor for concurrent requests with progress bar
         max_workers = min(CONC, len(tasks_to_process))
-        print('Phase 1: Generate first round response')
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks with reconstruction
-            future_to_task = {
-                executor.submit(process_single_task_with_reconstruction, task, all_perfect_tasks, tasks_to_process, DEFAULT_PATH): task
-                for task in tasks_to_process
-            }
+        if not args.load_history:
+            print('Phase 1: Generate first round response')
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks with reconstruction
+                future_to_task = {
+                    executor.submit(process_single_task_with_reconstruction, task, all_perfect_tasks, tasks_to_process, DEFAULT_PATH): task
+                    for task in tasks_to_process
+                }
+                
+                # Process completed tasks with progress bar
+                completed_tasks = []
+                desc = f"Generating LLM responses (attempt {attempt})"
+                with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
+                    for future in as_completed(future_to_task):
+                        try:
+                            completed_task = future.result()
+                            completed_tasks.append(completed_task)
+                        except Exception as e:
+                            original_task = future_to_task[future]
+                            logger.error(f"Failed to process task {original_task.get('instance_id', 'unknown')}: {e}")
+                            # Keep the original task if processing failed
+                            completed_tasks.append(original_task)
+                        finally:
+                            pbar.update(1)
+                
+                # Update tasks_to_process with the completed tasks
+                tasks_to_process = completed_tasks
             
-            # Process completed tasks with progress bar
-            completed_tasks = []
-            desc = f"Generating LLM responses (attempt {attempt})"
-            with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
-                for future in as_completed(future_to_task):
-                    try:
-                        completed_task = future.result()
-                        completed_tasks.append(completed_task)
-                    except Exception as e:
-                        original_task = future_to_task[future]
-                        logger.error(f"Failed to process task {original_task.get('instance_id', 'unknown')}: {e}")
-                        # Keep the original task if processing failed
-                        completed_tasks.append(original_task)
-                    finally:
-                        pbar.update(1)
+            # Phase 2: Extract Patches from LLM responses
+            print('Phase 2: Extract Patches from LLM responses')
+            extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
             
-            # Update tasks_to_process with the completed tasks
-            tasks_to_process = completed_tasks
-        
-        # Phase 2: Extract Patches from LLM responses
-        print('Phase 2: Extract Patches from LLM responses')
-        extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
-        
-        # If nothing was extracted, all tasks failed parsing. Prepare them for the next retry.
-        if not extracted_tasks:
-            logger.warning("No tasks were successfully extracted in this attempt.")
-            # Update tasks_to_process for the next loop
-            tasks_to_process = [
-                task for task in initial_tasks 
-                if task['instance_id'] in failed_to_parse_ids and task['instance_id'] not in processed_ids
-            ]
-            continue
-
+            # If nothing was extracted, all tasks failed parsing. Prepare them for the next retry.
+            if not extracted_tasks:
+                logger.warning("No tasks were successfully extracted in this attempt.")
+                # Update tasks_to_process for the next loop
+                tasks_to_process = [
+                    task for task in initial_tasks 
+                    if task['instance_id'] in failed_to_parse_ids and task['instance_id'] not in processed_ids
+                ]
+                continue
+        else:
+            logger.info('Load history from file.')
+            extracted_tasks = None
         # Phase 3: Evaluate successfully extracted patches
         print('Phase 3: Evaluate successfully extracted patches')
-        analysis_results = run_evaluation_phase(extracted_tasks)
-
+        analysis_results = run_evaluation_phase(extracted_tasks, args.load_history)
+        
         # --- Process and Segregate Results of the Current Iteration ---
         perfect_results_this_iter = analysis_results.get('perfect_tests', {})
         logger.info(f"Attempt {attempt}: Found {len(perfect_results_this_iter)} new instances with perfect tests.")

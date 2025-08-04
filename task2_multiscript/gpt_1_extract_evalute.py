@@ -488,40 +488,75 @@ def check_and_retry_insufficient_tests(
                 with open(history_file, 'r', encoding='utf-8') as f:
                     history_data = json.load(f)
                 logger.info("Successfully loaded history information")
-                return history_data.get('final_tasks', []), history_data.get('all_init_results', {})
+                
+                # 检查历史中的iteration次数
+                current_iteration = history_data.get('iteration', 0)
+                logger.info(f"History shows {current_iteration} iterations completed")
+                
+                # 如果历史中的iteration次数已达到max_retries，直接返回历史结果
+                if current_iteration >= max_retries:
+                    logger.info(f"History iteration ({current_iteration}) >= max_retries ({max_retries}), returning history results")
+                    return history_data.get('final_tasks', []), history_data.get('all_init_results', {})
+                else:
+                    logger.info(f"History iteration ({current_iteration}) < max_retries ({max_retries}), continuing from history")
+                    # 从历史数据继续，但不直接返回
+                    # 设置起始状态为历史数据
+                    tasks_to_evaluate = history_data.get('final_tasks', tasks_to_evaluate)
+                    retry_count = current_iteration
+                    all_init_results = history_data.get('all_init_results', {})
+                    
+                    # 重新运行最后一次的init测试以获取当前状态
+                    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=100)
+                    current_tasks = tasks_to_evaluate.copy()
+                    all_sufficient_tasks = []
+                    
+                    # 将当前结果更新到全局结果中
+                    all_init_results.update(current_init_results)
+                    
+                    # 跳过初始化部分，直接进入循环
+                    logger.info(f"Continuing from history with retry_count={retry_count}")
+                    # 使用goto到循环开始处的逻辑
+                    # 这里我们将通过设置变量来实现继续逻辑
+                    continue_from_history = True
             else:
                 logger.warning("History file not found, starting fresh evaluation")
+                continue_from_history = False
         except Exception as e:
             logger.error(f"Error loading history: {str(e)}, starting fresh evaluation")
+            continue_from_history = False
+    else:
+        continue_from_history = False
     
-    logger.info(f"Starting test evaluation with up to {max_retries} retries...")
-    
-    # 初始运行test_init获取基准结果
-    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=100)
-    current_tasks = tasks_to_evaluate.copy()
-    retry_count = 0
-    all_sufficient_tasks = []
-    
-    # 用于存储所有任务的完整init结果
-    all_init_results = {}
-    
-    # 将初始结果添加到全局结果中
-    all_init_results.update(current_init_results)
-    
-    # 存储初始状态
-    history_data = {
-        'final_tasks': [],
-        'all_init_results': all_init_results.copy(),
-        'iteration': 0
-    }
-    
-    # 保存初始状态
-    try:
-        os.makedirs(os.path.dirname(history_file), exist_ok=True)
-        with open(history_file, 'w', encoding='utf-8') as f:
-            json.dump(history_data, f, indent=2)
-    except Exception as e:
-        logger.warning(f"Failed to save initial history: {str(e)}")
+    # 如果不是从历史继续，执行正常的初始化
+    if not continue_from_history:
+        logger.info(f"Starting test evaluation with up to {max_retries} retries...")
+        
+        # 初始运行test_init获取基准结果
+        current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=100)
+        current_tasks = tasks_to_evaluate.copy()
+        retry_count = 0
+        all_sufficient_tasks = []
+        
+        # 用于存储所有任务的完整init结果
+        all_init_results = {}
+        
+        # 将初始结果添加到全局结果中
+        all_init_results.update(current_init_results)
+        
+        # 存储初始状态
+        history_data = {
+            'final_tasks': [],
+            'all_init_results': all_init_results.copy(),
+            'iteration': 0
+        }
+        
+        # 保存初始状态
+        try:
+            os.makedirs(os.path.dirname(history_file), exist_ok=True)
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save initial history: {str(e)}")
     
     while retry_count < max_retries and current_tasks:
         current_sufficient = []
@@ -678,7 +713,7 @@ if __name__ == "__main__":
                         help='Path to input JSONL file containing instance_id mapping')
     parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_multiscript/gpt_2_finish_bug_gpt4o_ranker.jsonl",
                         help='Path to output JSONL file')
-    parser.add_argument('--load_history', type=bool, default=False, 
+    parser.add_argument('--load_history', type=bool, default=True, 
                         help='whether load unittest test results from history')
 
     args = parser.parse_args()

@@ -1271,6 +1271,123 @@ def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
     print("All retry attempts failed for DeepSeek")
     return None
 
+def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, max_tokens: int = 8192, enable_thinking: bool = True, api_key: str = None) -> str:
+    """
+    使用智谱AI的GLM模型获取回复，支持流式输出和深度思考模式
+    
+    Args:
+        prompt: 用户输入的提示文本
+        model: GLM模型名称，默认为"glm-4.5"
+        temperature: 控制输出的随机性，范围0-1，默认0.7
+        max_tokens: 最大输出tokens数量，默认4096
+        enable_thinking: 是否启用深度思考模式，默认True
+        api_key: 智谱AI的API密钥，如果不提供则尝试从环境变量获取
+    
+    Returns:
+        str: GLM模型的回复内容，如果失败则返回None
+    """
+    import os
+    
+    # 获取API密钥
+    if not api_key:
+        api_key = os.getenv("ZHIPUAI_API_KEY")
+        if not api_key:
+            logger.error("ZHIPUAI API key not found. Please set ZHIPUAI_API_KEY environment variable.")
+            return None
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # 构建消息结构
+    messages = [
+        {"role": "user", "content": prompt}
+    ]
+    
+    # 构建请求数据
+    data = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True
+    }
+    
+    # 添加思考模式配置
+    if enable_thinking:
+        data["thinking"] = {"type": "enabled"}
+    
+    response_text = ""
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Calling GLM API (attempt {attempt + 1}/{max_retries})")
+            
+            response = requests.post(
+                "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                headers=headers,
+                json=data,
+                stream=True,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                # 处理流式响应
+                for line in response.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            try:
+                                chunk_data = json.loads(line[6:])
+                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    delta = chunk_data['choices'][0].get('delta', {})
+                                    if 'content' in delta:
+                                        content = delta['content']
+                                        response_text += content
+                                        # 可以在这里添加实时输出，如果需要
+                                        # print(content, end='')
+                            except json.JSONDecodeError:
+                                continue
+                            except Exception as e:
+                                logger.warning(f"Error processing chunk: {e}")
+                                continue
+                
+                if response_text.strip():
+                    logger.info("Successfully received GLM response")
+                    return response_text.strip()
+                else:
+                    logger.warning("Received empty response from GLM")
+                    return None
+            
+            else:
+                logger.error(f"GLM API request failed with status code: {response.status_code}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                continue
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"GLM API request timed out (attempt {attempt + 1})")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error calling GLM API: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in GLM API call: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+    
+    print("All retry attempts failed for GLM")
+    return None
+
 # ================== prompt construction ==================
 def read_yaml(config='default'):
     yaml_file = f'/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/prompt/{config}.yaml'
@@ -2208,5 +2325,5 @@ def get_project_structure_from_scratch(
 
 if __name__ == "__main__":
     inputs = 'test'
-    response = get_llm_response(inputs)
+    response = get_glm_response(inputs, api_key='59fb21ccd88d41f985b71c02a99c0dce')
     print(response)

@@ -1273,13 +1273,13 @@ def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
 
 def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, max_tokens: int = 8192, enable_thinking: bool = True, api_key: str = None) -> str:
     """
-    使用智谱AI的GLM模型获取回复，支持流式输出和深度思考模式
+    使用智谱AI的GLM模型获取回复，支持深度思考模式
     
     Args:
         prompt: 用户输入的提示文本
         model: GLM模型名称，默认为"glm-4.5"
         temperature: 控制输出的随机性，范围0-1，默认0.7
-        max_tokens: 最大输出tokens数量，默认4096
+        max_tokens: 最大输出tokens数量，默认8192
         enable_thinking: 是否启用深度思考模式，默认True
         api_key: 智谱AI的API密钥，如果不提供则尝试从环境变量获取
     
@@ -1311,14 +1311,13 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "stream": True
+        "stream": False  # 关闭流式输出
     }
     
     # 添加思考模式配置
     if enable_thinking:
         data["thinking"] = {"type": "enabled"}
     
-    response_text = ""
     max_retries = 3
     
     for attempt in range(max_retries):
@@ -1329,36 +1328,24 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
                 headers=headers,
                 json=data,
-                stream=True,
                 timeout=120
             )
             
             if response.status_code == 200:
-                # 处理流式响应
-                for line in response.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        if line.startswith('data: '):
-                            try:
-                                chunk_data = json.loads(line[6:])
-                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
-                                    delta = chunk_data['choices'][0].get('delta', {})
-                                    if 'content' in delta:
-                                        content = delta['content']
-                                        response_text += content
-                                        # 可以在这里添加实时输出，如果需要
-                                        # print(content, end='')
-                            except json.JSONDecodeError:
-                                continue
-                            except Exception as e:
-                                logger.warning(f"Error processing chunk: {e}")
-                                continue
+                result = response.json()
                 
-                if response_text.strip():
-                    logger.info("Successfully received GLM response")
-                    return response_text.strip()
+                if 'choices' in result and len(result['choices']) > 0:
+                    message = result['choices'][0].get('message', {})
+                    content = message.get('content', '')
+                    
+                    if content.strip():
+                        logger.info("Successfully received GLM response")
+                        return content.strip()
+                    else:
+                        logger.warning("Received empty response from GLM")
+                        return None
                 else:
-                    logger.warning("Received empty response from GLM")
+                    logger.error("Invalid response format from GLM API")
                     return None
             
             else:

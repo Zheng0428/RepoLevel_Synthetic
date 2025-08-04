@@ -13,18 +13,18 @@ prompt_template: |
     {problem_statement}
 
     ## Task:
-    Regenerate BOTH the buggy code and unittest for the same problem statement, but this time create a MUCH MORE COMPREHENSIVE unittest with significantly more test cases to ensure thorough coverage and detection of the bug.
+    Based on the provided clean code and previous problem statement, analyze the code functionality and generate a NEW problem statement that describes a realistic bug scenario. Then regenerate BOTH the buggy code and a MUCH MORE COMPREHENSIVE unittest with significantly more test cases.
 
     ## Requirements:
-    1. **Keep the same problem statement** - do not change the bug concept
-    2. **Regenerate the buggy code** - you may refine the bug implementation to be more subtle or effective
+    1. **Generate a NEW problem statement** - analyze the code functionality and create a realistic bug scenario
+    2. **Regenerate the buggy code** - implement the bug according to the new problem statement
     3. **Create EXTENSIVE unittest coverage** with at least 12-15 individual test methods
     4. **Ensure robust test detection** - the unittest must reliably detect the bug
     5. **Include comprehensive pass-to-pass tests** that verify core functionality remains intact
 
     ## Output Format:
     ===PROBLEM_STATEMENT_START===
-    {problem_statement}
+    [NEW problem statement based on code analysis - describe the intended functionality and the bug to be introduced]
     ===PROBLEM_STATEMENT_END===
 
     ===BUG_ANALYSIS_START===
@@ -38,7 +38,7 @@ prompt_template: |
     - Type of programming error introduced
     - Why this bug is subtle and difficult to detect through code review
     - What makes this bug realistic (common developer mistakes)
-    - Any refinements made to improve bug detectability
+    - How the bug relates to the actual code functionality
 
     **Unittest Design:**
     - Comprehensive list of test scenarios covered (aim for 12-15+ test methods)
@@ -53,7 +53,7 @@ prompt_template: |
     FILE_PATH: [exact file path of the main script]
     ===CODE_START===
     ```python
-    [complete buggy code for the main script - refined version that may be more detectable]
+    [complete buggy code for the main script - implementing the bug described in the new problem statement]
     ```
     ===CODE_END===
     ===FILE_END===
@@ -63,7 +63,7 @@ prompt_template: |
     FILE_PATH: [exact file path of dependencies script]
     ===CODE_START===
     ```python
-    [complete buggy code for dependencies script - only if changes are needed]
+    [complete buggy code for dependencies script - only if changes are needed for the new bug]
     ```
     ===CODE_END===
     ===FILE_END===
@@ -121,8 +121,7 @@ prompt_template: |
     - Include both specific bug-targeting tests and general functionality validation
     - Ensure test methods are independent and can run in any order
     - The enhanced unittest should provide confidence that the code works correctly
-    - Make sure to maintain the original problem statement exactly as provided
-    - Balance between bug detection and verification of unaffected functionality
     - **Main Script is the primary focus**, but Dependencies Scripts can be modified if the bug logic requires it
     - Dependencies Scripts may be empty if no dependencies exist
     - **Support multiple dependencies scripts** - include all relevant files that need modification
+    - Use the previous problem statement as context, but generate a new one based on actual code functionality

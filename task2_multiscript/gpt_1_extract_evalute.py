@@ -651,7 +651,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     logger.info("=== Phase 3.1 === Starting construct init state evaluation...")
     
     # 检查并重试不足的任务（同时获取最终测试结果）
-    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=7, load_history=load_history)
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=10, load_history=load_history)
     
     # # 根据最终init结果筛选有足够通过测试的任务，把不满足的删除
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)

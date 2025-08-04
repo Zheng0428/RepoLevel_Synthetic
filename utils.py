@@ -2204,6 +2204,8 @@ def get_project_structure_from_scratch(
     return d
 
 
+
+
 if __name__ == "__main__":
     inputs = 'test'
     response = get_llm_response(inputs)

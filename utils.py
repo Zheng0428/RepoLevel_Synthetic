@@ -1316,7 +1316,7 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
     
     # 添加思考模式配置
     if enable_thinking:
-        data["thinking"] = {"type": "enabled"}
+        data["thinking"] = {"type": "disabled"}
     
     max_retries = 3
     
@@ -2311,6 +2311,6 @@ def get_project_structure_from_scratch(
 
 
 if __name__ == "__main__":
-    inputs = 'test'
-    response = get_glm_response(inputs, api_key='59fb21ccd88d41f985b71c02a99c0dce')
+    inputs = '美国的首都是哪里'
+    response = get_glm_response(inputs, api_key='59fb21ccd88d41f985b71c02a99c0dce.5Ux8Qx4d6D5hscG9')
     print(response)

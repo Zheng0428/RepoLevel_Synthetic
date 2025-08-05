@@ -478,7 +478,7 @@ def check_and_retry_insufficient_tests(
     """
     
     # 历史文件路径
-    history_file = f"{GENERATE_DATA_PATH}/check_and_retry_history.json"
+    history_file = os.path.join(GENERATE_DATA_PATH, "check_and_retry_history.json")
     
     # 如果load_history为True，尝试读取历史信息
     if load_history:
@@ -667,7 +667,7 @@ def check_and_retry_buggy_tests(
     retry_categories = ['bug_not_detected', 'other_cases']
     
     # Load history if available
-    history_file = os.path.join(HISTORY_DIR, "buggy_retry_history.json")
+    history_file = os.path.join(GENERATE_DATA_PATH, "buggy_retry_history.json")
     history_data = None
     
     if load_history and os.path.exists(history_file):
@@ -700,7 +700,7 @@ def check_and_retry_buggy_tests(
         for category in retry_categories:
             for instance_id, result_data in analysis_results[category].items():
                 # Find the original task
-                task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
+                task = next((t for t in tasks_to_evaluate if t['new_instance_id'] == instance_id), None)
                 if task and task in current_tasks:
                     tasks_needing_retry.append(task)
         

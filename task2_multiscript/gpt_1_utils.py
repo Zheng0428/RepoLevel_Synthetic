@@ -13,12 +13,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
-from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response, get_glm_response
+from utils import get_glm_response as get_model_resposne #get_llm_response, get_deepseek_response, get_glm_response
 from envs import DEFAULT_PATH, TRUE_PROJECT_FILE_LOC
 from utils import construct_three_shot_prompt_with_mutiscript as construct_prompt
 from utils import construct_unittest_prompt_with_mutiscript as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
-CONC=64
+CONC=5
 TEST_N=10000000
 
 
@@ -700,7 +700,7 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
     Returns:
         Updated task with new buggy code, or None if failed
     """
-    instance_id = task.get('instance_id', 'unknown')
+    instance_id = task.get('new_instance_id', 'unknown')
     try:
         # Format the prompt with task-specific information
         formatted_prompt = construct_buggy_prompt(task)

@@ -1271,7 +1271,7 @@ def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
     print("All retry attempts failed for DeepSeek")
     return None
 
-def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, max_tokens: int = 8192, enable_thinking: bool = False, api_key: str = '59fb21ccd88d41f985b71c02a99c0dce.5Ux8Qx4d6D5hscG9') -> str:
+def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, enable_thinking: bool = False, api_key: str = '59fb21ccd88d41f985b71c02a99c0dce.5Ux8Qx4d6D5hscG9') -> str:
     """
     使用智谱AI的GLM模型获取回复，支持深度思考模式
     
@@ -1310,7 +1310,7 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
         "model": model,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_tokens": MAX_TOKENS,
         "stream": False  # 关闭流式输出
     }
     
@@ -1322,13 +1322,13 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
     
     for attempt in range(max_retries):
         try:
-            logger.info(f"Calling GLM API (attempt {attempt + 1}/{max_retries})")
+            # logger.info(f"Calling GLM API (attempt {attempt + 1}/{max_retries})")
             
             response = requests.post(
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=120
+                timeout=600  # 10-minute timeout
             )
             
             if response.status_code == 200:

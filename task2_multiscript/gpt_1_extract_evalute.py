@@ -687,7 +687,7 @@ def check_and_retry_buggy_tests(
         
         # Run GPT bug evaluation
         logger.info("Running GPT bug evaluation...")
-        bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=100)
+        bug_results = test_gpt_bug(current_tasks[:100], max_workers=CONC, timeout=50)
         
         # Merge new results with existing ones
         all_bug_results.update(bug_results)
@@ -715,7 +715,7 @@ def check_and_retry_buggy_tests(
         retried_tasks = retry_buggy_code_in_parallel(
             tasks_needing_retry, 
             max_workers=CONC,
-            retry_count=retry_count + 1  # Pass retry count for better logging
+            # retry_count=retry_count + 1  # Pass retry count for better logging
         )
         
         # Prepare for next iteration
@@ -740,9 +740,9 @@ def check_and_retry_buggy_tests(
     final_analysis = analyze_combined_results(init_results, all_bug_results)
     
     # Filter to only include tasks that were originally provided
-    final_tasks = [t for t in tasks_to_evaluate if t['instance_id'] in all_bug_results]
+    final_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
     final_bug_results = {k: v for k, v in all_bug_results.items() 
-                        if k in [t['instance_id'] for t in final_tasks]}
+                        if k in [t['new_instance_id'] for t in final_tasks]}
     
     logger.info(f"Buggy test evaluation completed. Total tasks: {len(final_tasks)}, "
                 f"retry iterations: {retry_count}")
@@ -775,7 +775,12 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     logger.info("=== Phase 3.1 === Starting construct init state evaluation...")
     
     # 检查并重试不足的任务（同时获取最终测试结果）
-    final_tasks, final_init_results = check_and_retry_insufficient_tests(tasks_to_evaluate, threshold=5, max_retries=10, load_history=load_history)
+    final_tasks, final_init_results = check_and_retry_insufficient_tests(
+        tasks_to_evaluate, 
+        threshold=5, 
+        max_retries=10, 
+        load_history=load_history
+    )
     
     # # 根据最终init结果筛选有足够通过测试的任务，把不满足的删除
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
@@ -786,8 +791,8 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     final_tasks, final_bug_results = check_and_retry_buggy_tests(
         filtered_final_tasks, 
         filtered_final_init_results, 
-        max_retries=10, 
-        load_history=load_history
+        max_retries=1, 
+        load_history=False
     )
     
     # 分析最终结果

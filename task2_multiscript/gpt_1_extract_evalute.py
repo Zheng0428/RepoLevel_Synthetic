@@ -730,10 +730,14 @@ def check_and_retry_buggy_tests(
         
         retry_count += 1
         
-        # 保存进度
+        # 保存进度 
+        filtered_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
+        filtered_bug_results = {k: v for k, v in all_bug_results.items() 
+                             if k in [t['new_instance_id'] for t in filtered_tasks]}
+        
         history_data = {
-            'final_tasks': current_tasks,
-            'final_bug_results': all_bug_results.copy(),
+            'final_tasks': filtered_tasks,
+            'final_bug_results': filtered_bug_results,
             'iteration': retry_count
         }
         

@@ -506,7 +506,7 @@ def check_and_retry_insufficient_tests(
                     all_init_results = history_data.get('all_init_results', {})
                     
                     # 重新运行最后一次的init测试以获取当前状态
-                    current_init_results = test_init(tasks_to_evaluate, max_workers=CONC, timeout=100)
+                    current_init_results = test_init(tasks_to_evaluate, max_workers=100, timeout=50)
                     current_tasks = tasks_to_evaluate.copy()
                     all_sufficient_tasks = []
                     
@@ -657,7 +657,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     filtered_final_tasks, filtered_final_init_results = filter_tasks_by_test_count(final_tasks, final_init_results, 5)
     
     logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")
-    return None
+
     gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=100)
 
     # 分析结果

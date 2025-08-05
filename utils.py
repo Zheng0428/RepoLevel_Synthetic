@@ -1271,7 +1271,7 @@ def get_deepseek_response(prompt: str, temperature: float = 0.7) -> str:
     print("All retry attempts failed for DeepSeek")
     return None
 
-def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, max_tokens: int = 8192, enable_thinking: bool = True, api_key: str = None) -> str:
+def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0.7, max_tokens: int = 8192, enable_thinking: bool = False, api_key: str = '59fb21ccd88d41f985b71c02a99c0dce.5Ux8Qx4d6D5hscG9') -> str:
     """
     使用智谱AI的GLM模型获取回复，支持深度思考模式
     
@@ -1316,7 +1316,7 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
     
     # 添加思考模式配置
     if enable_thinking:
-        data["thinking"] = {"type": "disabled"}
+        data["thinking"] = {"type": "enabled"}
     
     max_retries = 3
     
@@ -2312,5 +2312,5 @@ def get_project_structure_from_scratch(
 
 if __name__ == "__main__":
     inputs = '美国的首都是哪里'
-    response = get_glm_response(inputs, api_key='59fb21ccd88d41f985b71c02a99c0dce.5Ux8Qx4d6D5hscG9')
+    response = get_glm_response(inputs)
     print(response)

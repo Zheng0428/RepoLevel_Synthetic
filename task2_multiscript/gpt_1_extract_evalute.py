@@ -670,16 +670,39 @@ def check_and_retry_buggy_tests(
     history_file = os.path.join(GENERATE_DATA_PATH, "buggy_retry_history.json")
     history_data = None
     
+    # 应该这样实现历史数据加载逻辑：
     if load_history and os.path.exists(history_file):
         try:
             with open(history_file, 'r', encoding='utf-8') as f:
                 history_data = json.load(f)
-            logger.info(f"Loaded retry history from {history_file}")
-            if 'final_bug_results' in history_data:
-                all_bug_results.update(history_data['final_bug_results'])
-                logger.info(f"Loaded {len(all_bug_results)} existing bug results from history")
+            
+            current_iteration = history_data.get('iteration', 0)
+            saved_final_tasks = history_data.get('final_tasks', [])
+            saved_all_init_results = history_data.get('all_init_results', {})
+            
+            if current_iteration >= max_retries:
+                # 重新验证历史任务
+                logger.info(f"History shows {current_iteration} iterations, re-validating tasks...")
+                current_init_results = test_init(saved_final_tasks, max_workers=CONC, timeout=50)
+                
+                # 验证结果一致性
+                valid_tasks = []
+                for task in saved_final_tasks:
+                    instance_id = task['new_instance_id']
+                    if instance_id in current_init_results:
+                        valid_tasks.append(task)
+                
+                return valid_tasks, {k: v for k, v in saved_all_init_results.items() 
+                                if k in [t['new_instance_id'] for t in valid_tasks]}
+            
+            else:
+                # 继续处理，使用历史数据作为起点
+                tasks_to_evaluate = saved_final_tasks
+                retry_count = current_iteration
+                all_init_results = saved_all_init_results
+                
         except Exception as e:
-            logger.warning(f"Failed to load retry history: {str(e)}")
+            logger.warning(f"Failed to load history: {str(e)}, starting fresh")
     
     # 初始运行：在循环开始前先运行一次
     logger.info(f"=== Initial Buggy Test Evaluation ===")

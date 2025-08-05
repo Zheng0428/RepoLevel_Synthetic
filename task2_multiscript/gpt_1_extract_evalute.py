@@ -659,7 +659,7 @@ def check_and_retry_buggy_tests(
     Returns:
         Tuple of (final_tasks, final_bug_results) after retries
     """
-    current_tasks = tasks_to_evaluate.copy()
+    current_tasks = tasks_to_evaluate.copy()[:100]
     all_bug_results = {}
     retry_count = 0
     
@@ -699,7 +699,7 @@ def check_and_retry_buggy_tests(
         for category in retry_categories:
             for instance_id, result_data in analysis_results[category].items():
                 # 找到原始任务
-                task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
+                task = next((t for t in tasks_to_evaluate if t['new_instance_id'] == instance_id), None)
                 if task and task in current_tasks:
                     tasks_needing_retry.append(task)
         
@@ -796,8 +796,8 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     final_tasks, final_bug_results = check_and_retry_buggy_tests(
         filtered_final_tasks, 
         filtered_final_init_results, 
-        max_retries=1, 
-        load_history=False
+        max_retries=3, 
+        load_history=True
     )
     
     # 分析最终结果

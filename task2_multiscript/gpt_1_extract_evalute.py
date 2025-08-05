@@ -712,10 +712,12 @@ def check_and_retry_buggy_tests(
         tasks_needing_retry = []
         for category in retry_categories:
             for instance_id, result_data in analysis_results[category].items():
-                # 找到原始任务
-                task = next((t for t in tasks_to_evaluate if t['new_instance_id'] == instance_id), None)
-                if task:
-                    tasks_needing_retry.append(task)
+                # 基于instance_id匹配，而不是对象引用
+                matching_tasks = [t for t in current_tasks if t['new_instance_id'] == instance_id]
+                tasks_needing_retry.extend(matching_tasks)
+
+        # 去重（防止重复添加）
+        tasks_needing_retry = list({t['new_instance_id']: t for t in tasks_needing_retry}.values())
         
         if not tasks_needing_retry:
             logger.info("All tasks have sufficient bug detection. Stopping retries.")

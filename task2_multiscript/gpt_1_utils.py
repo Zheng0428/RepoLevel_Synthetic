@@ -7,10 +7,12 @@ import signal
 import time
 import tempfile
 import random
+import asyncio  # 新增
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+from tqdm.asyncio import tqdm as async_tqdm  # 新增
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
 from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response, get_glm_response
@@ -728,8 +730,38 @@ def retry_buggy_code_generation_for_task(task: dict) -> Optional[dict]:
         logger.error(f"Error retrying buggy code generation for {instance_id}: {str(e)}")
         return None
 
-def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CONC) -> List[dict]:
-    """Parallel version of buggy code retry (single retry only)"""
+async def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CONC) -> List[dict]:
+    """异步并行版本的重试buggy代码生成（单次重试）"""
+    retried_tasks = []
+    
+    # 创建信号量来控制并发
+    semaphore = asyncio.Semaphore(max_workers)
+    
+    async def process_single_task(task: dict) -> Optional[dict]:
+        """处理单个任务"""
+        async with semaphore:
+            try:
+                # 使用asyncio.to_thread在异步环境中执行同步函数
+                result = await asyncio.to_thread(retry_buggy_code_generation_for_task, task)
+                return result
+            except Exception as e:
+                instance_id = task.get('instance_id', 'unknown')
+                logger.error(f"Task {instance_id} failed during async retry: {str(e)}")
+                return None
+    
+    # 创建所有任务
+    task_futures = [process_single_task(task) for task in tasks]
+    
+    # 使用异步tqdm显示进度
+    for future in async_tqdm.as_completed(task_futures, total=len(tasks), desc="Retrying buggy code generation"):
+        result = await future
+        if result:
+            retried_tasks.append(result)
+    
+    return retried_tasks
+
+def retry_buggy_code_in_parallel_sync(tasks: List[dict], max_workers: int = CONC) -> List[dict]:
+    """同步并行版本的buggy代码重试（单次重试）"""
     retried_tasks = []
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -13,12 +13,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from temp_testbed import TempTestbed, get_all_filenames
 from utils import fake_git_repo
-from utils import get_glm_response as get_model_resposne #get_llm_response, get_deepseek_response, get_glm_response
+from utils import get_llm_response as get_model_resposne #get_llm_response, get_deepseek_response, get_glm_response
 from envs import DEFAULT_PATH, TRUE_PROJECT_FILE_LOC
 from utils import construct_three_shot_prompt_with_mutiscript as construct_prompt
 from utils import construct_unittest_prompt_with_mutiscript as construct_unittest_prompt
 from utils import construct_buggy_prompt as construct_buggy_prompt
-CONC=5
+CONC=64
 TEST_N=10000000
 
 

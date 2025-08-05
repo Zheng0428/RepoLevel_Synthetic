@@ -1322,7 +1322,8 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
     
     for attempt in range(max_retries):
         try:
-            # logger.info(f"Calling GLM API (attempt {attempt + 1}/{max_retries})")
+            if attempt > 0:
+                logger.info(f"Calling GLM API (attempt {attempt + 1}/{max_retries})")
             
             response = requests.post(
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",

@@ -671,6 +671,7 @@ def check_and_retry_buggy_tests(
     history_data = None
     
     # 应该这样实现历史数据加载逻辑：
+    # 应该这样实现：
     if load_history and os.path.exists(history_file):
         try:
             with open(history_file, 'r', encoding='utf-8') as f:
@@ -678,28 +679,16 @@ def check_and_retry_buggy_tests(
             
             current_iteration = history_data.get('iteration', 0)
             saved_final_tasks = history_data.get('final_tasks', [])
-            saved_all_init_results = history_data.get('all_init_results', {})
+            saved_bug_results = history_data.get('final_bug_results', {})
             
             if current_iteration >= max_retries:
-                # 重新验证历史任务
-                logger.info(f"History shows {current_iteration} iterations, re-validating tasks...")
-                current_init_results = test_init(saved_final_tasks, max_workers=CONC, timeout=50)
-                
-                # 验证结果一致性
-                valid_tasks = []
-                for task in saved_final_tasks:
-                    instance_id = task['new_instance_id']
-                    if instance_id in current_init_results:
-                        valid_tasks.append(task)
-                
-                return valid_tasks, {k: v for k, v in saved_all_init_results.items() 
-                                if k in [t['new_instance_id'] for t in valid_tasks]}
-            
+                # 返回历史bug检测结果
+                return saved_final_tasks, saved_bug_results
             else:
-                # 继续处理，使用历史数据作为起点
+                # 继续处理
                 tasks_to_evaluate = saved_final_tasks
                 retry_count = current_iteration
-                all_init_results = saved_all_init_results
+                all_bug_results = saved_bug_results  # 这才是应该使用的变量
                 
         except Exception as e:
             logger.warning(f"Failed to load history: {str(e)}, starting fresh")

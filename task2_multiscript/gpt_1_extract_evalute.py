@@ -641,6 +641,130 @@ def check_and_retry_insufficient_tests(
     return final_tasks, all_init_results
 
 
+def check_and_retry_buggy_tests(
+    tasks_to_evaluate: List[dict], 
+    init_results: dict,
+    max_retries: int = 10,
+    load_history: bool = True
+) -> Tuple[List[dict], dict]:
+    """
+    Check and retry buggy tests with insufficient bug detection using multi-round retry mechanism.
+    
+    Args:
+        tasks_to_evaluate: List of tasks to evaluate
+        init_results: Initial test results for each task
+        max_retries: Maximum number of retry attempts
+        load_history: Whether to load history from previous runs
+        
+    Returns:
+        Tuple of (final_tasks, final_bug_results) after retries
+    """
+    current_tasks = tasks_to_evaluate.copy()
+    all_bug_results = {}
+    retry_count = 0
+    
+    # Categories to retry
+    retry_categories = ['bug_not_detected', 'other_cases']
+    
+    # Load history if available
+    history_file = os.path.join(HISTORY_DIR, "buggy_retry_history.json")
+    history_data = None
+    
+    if load_history and os.path.exists(history_file):
+        try:
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history_data = json.load(f)
+            logger.info(f"Loaded retry history from {history_file}")
+            if 'final_bug_results' in history_data:
+                all_bug_results.update(history_data['final_bug_results'])
+                logger.info(f"Loaded {len(all_bug_results)} existing bug results from history")
+        except Exception as e:
+            logger.warning(f"Failed to load retry history: {str(e)}")
+    
+    while retry_count < max_retries and current_tasks:
+        logger.info(f"=== Buggy Test Retry Iteration {retry_count + 1}/{max_retries} ===")
+        logger.info(f"Processing {len(current_tasks)} tasks...")
+        
+        # Run GPT bug evaluation
+        logger.info("Running GPT bug evaluation...")
+        bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=100)
+        
+        # Merge new results with existing ones
+        all_bug_results.update(bug_results)
+        
+        # Analyze combined results
+        analysis_results = analyze_combined_results(init_results, all_bug_results)
+        
+        # Collect tasks that need retry
+        tasks_needing_retry = []
+        for category in retry_categories:
+            for instance_id, result_data in analysis_results[category].items():
+                # Find the original task
+                task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
+                if task and task in current_tasks:
+                    tasks_needing_retry.append(task)
+        
+        if not tasks_needing_retry:
+            logger.info("All tasks have sufficient bug detection. Stopping retries.")
+            break
+            
+        logger.info(f"Found {len(tasks_needing_retry)} tasks needing retry")
+        
+        # Retry the buggy code generation for these tasks
+        logger.info("Retrying buggy code generation...")
+        retried_tasks = retry_buggy_code_in_parallel(
+            tasks_needing_retry, 
+            max_workers=CONC,
+            retry_count=retry_count + 1  # Pass retry count for better logging
+        )
+        
+        # Prepare for next iteration
+        current_tasks = retried_tasks
+        retry_count += 1
+        
+        # Save progress
+        history_data = {
+            'final_tasks': current_tasks,
+            'final_bug_results': all_bug_results.copy(),
+            'iteration': retry_count
+        }
+        
+        try:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, indent=2)
+            logger.info(f"Retry progress saved to {history_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save retry progress: {str(e)}")
+    
+    # Final analysis after all retries
+    final_analysis = analyze_combined_results(init_results, all_bug_results)
+    
+    # Filter to only include tasks that were originally provided
+    final_tasks = [t for t in tasks_to_evaluate if t['instance_id'] in all_bug_results]
+    final_bug_results = {k: v for k, v in all_bug_results.items() 
+                        if k in [t['instance_id'] for t in final_tasks]}
+    
+    logger.info(f"Buggy test evaluation completed. Total tasks: {len(final_tasks)}, "
+                f"retry iterations: {retry_count}")
+    
+    # Save final results
+    history_data = {
+        'final_tasks': final_tasks,
+        'final_bug_results': final_bug_results,
+        'iteration': retry_count
+    }
+    
+    try:
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history_data, f, indent=2)
+        logger.info("Final buggy test results saved to history file")
+    except Exception as e:
+        logger.warning(f"Failed to save final buggy test history: {str(e)}")
+    
+    return final_tasks, final_bug_results
+
+
+
 def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     """
     Runs the full evaluation pipeline (init, gpt_bug) and analysis.
@@ -658,41 +782,17 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     
     logger.info("=== Phase 3.2 === Starting GPT bug evaluation ...")
 
-    gpt_bug_results = test_gpt_bug(filtered_final_tasks, max_workers=CONC, timeout=100)
-
-    # 分析结果
-    logger.info("Analyzing combined results...")
-    analysis_results = analyze_combined_results(filtered_final_init_results, gpt_bug_results)
-
-    # 检查并重试bug未能被检测的的任务
-    logger.info("Re-running buggy state evaluation with final task set...")
+    # 使用多轮重试机制检查并重试bug检测不足的任务
+    final_tasks, final_bug_results = check_and_retry_buggy_tests(
+        filtered_final_tasks, 
+        filtered_final_init_results, 
+        max_retries=10, 
+        load_history=load_history
+    )
     
-    # Add buggy code retry mechanism (fixed single retry)
-    retry_categories = ['bug_not_detected', 'other_cases']
-    retry_tasks = []
-    
-    # Collect tasks that need retry
-    for category in retry_categories:
-        for instance_id, result_data in analysis_results[category].items():
-            # Find the original task
-            task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
-            if task:
-                retry_tasks.append(task)
-    
-    if retry_tasks:
-        logger.info(f"Retrying {len(retry_tasks)} tasks with insufficient bug detection...")
-        # Fixed single retry without retry_count parameter
-        retried_tasks = retry_buggy_code_in_parallel(retry_tasks, max_workers=CONC)
-        
-        # Re-evaluate the retried tasks
-        retried_bug_results = test_gpt_bug(retried_tasks, max_workers=CONC, timeout=100)
-        
-        # Merge retried results with original results
-        for instance_id, result in retried_bug_results.items():
-            gpt_bug_results[instance_id] = result
-        
-        # Re-analyze combined results after retry
-        analysis_results = analyze_combined_results(filtered_final_init_results, gpt_bug_results)
+    # 分析最终结果
+    logger.info("Analyzing final combined results...")
+    analysis_results = analyze_combined_results(filtered_final_init_results, final_bug_results)
 
     return analysis_results
 

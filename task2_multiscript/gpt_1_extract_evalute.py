@@ -164,8 +164,8 @@ def test_gpt_bug(tasks, max_workers, timeout):
 
 def eval_gpt_bug_instance(instance: dict, log_path: str, timeout=100) -> dict:
     """评估GPT生成的bug实例"""
-    instance_id = instance['instance_id']
-    new_instance_id = instance['new_instance_id']
+    instance_id = instance['new_instance_id']
+    # new_instance_id = instance['new_instance_id']
     repo = instance['repo']
     base_commit = instance['base_commit']
     repo_commit = get_repo_commit_name(repo, base_commit)

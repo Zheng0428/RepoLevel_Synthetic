@@ -685,10 +685,12 @@ def check_and_retry_buggy_tests(
                 # 返回历史bug检测结果
                 return saved_final_tasks, saved_bug_results
             else:
-                # 继续处理
-                tasks_to_evaluate = saved_final_tasks
+                current_tasks = saved_final_tasks  # 使用历史任务列表
                 retry_count = current_iteration
-                all_bug_results = saved_bug_results  # 这才是应该使用的变量
+                all_bug_results = saved_bug_results
+                
+                logger.info(f"Loaded history: {len(current_tasks)} tasks, "
+                           f"starting from retry {retry_count + 1}")
                 
         except Exception as e:
             logger.warning(f"Failed to load history: {str(e)}, starting fresh")
@@ -712,7 +714,7 @@ def check_and_retry_buggy_tests(
             for instance_id, result_data in analysis_results[category].items():
                 # 找到原始任务
                 task = next((t for t in tasks_to_evaluate if t['new_instance_id'] == instance_id), None)
-                if task and task in current_tasks:
+                if task:
                     tasks_needing_retry.append(task)
         
         if not tasks_needing_retry:
@@ -812,7 +814,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     final_tasks, final_bug_results = check_and_retry_buggy_tests(
         filtered_final_tasks, 
         filtered_final_init_results, 
-        max_retries=3, 
+        max_retries=2, 
         load_history=True
     )
     

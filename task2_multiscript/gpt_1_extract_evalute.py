@@ -681,26 +681,25 @@ def check_and_retry_buggy_tests(
         except Exception as e:
             logger.warning(f"Failed to load retry history: {str(e)}")
     
+    # 初始运行：在循环开始前先运行一次
+    logger.info(f"=== Initial Buggy Test Evaluation ===")
+    logger.info(f"Processing {len(current_tasks)} tasks...")
+    
+    # 运行初始GPT bug评估
+    bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=60)
+    all_bug_results.update(bug_results)
+    
+    # 分析初始结果
+    analysis_results = analyze_combined_results(init_results, all_bug_results)
+    
+    # 主循环：从retry_count=1开始
     while retry_count < max_retries and current_tasks:
-        logger.info(f"=== Buggy Test Retry Iteration {retry_count + 1}/{max_retries} ===")
-        logger.info(f"Processing {len(current_tasks)} tasks...")
-        
-        # Run GPT bug evaluation
-        logger.info("Running GPT bug evaluation...")
-        bug_results = test_gpt_bug(current_tasks[:100], max_workers=CONC, timeout=50)
-        
-        # Merge new results with existing ones
-        all_bug_results.update(bug_results)
-        
-        # Analyze combined results
-        analysis_results = analyze_combined_results(init_results, all_bug_results)
-        
-        # Collect tasks that need retry
+        # 收集需要retry的任务
         tasks_needing_retry = []
         for category in retry_categories:
             for instance_id, result_data in analysis_results[category].items():
-                # Find the original task
-                task = next((t for t in tasks_to_evaluate if t['new_instance_id'] == instance_id), None)
+                # 找到原始任务
+                task = next((t for t in tasks_to_evaluate if t['instance_id'] == instance_id), None)
                 if task and task in current_tasks:
                     tasks_needing_retry.append(task)
         
@@ -708,21 +707,30 @@ def check_and_retry_buggy_tests(
             logger.info("All tasks have sufficient bug detection. Stopping retries.")
             break
             
+        logger.info(f"=== Buggy Test Retry Iteration {retry_count + 1}/{max_retries} ===")
         logger.info(f"Found {len(tasks_needing_retry)} tasks needing retry")
         
-        # Retry the buggy code generation for these tasks
+        # Retry bug生成
         logger.info("Retrying buggy code generation...")
         retried_tasks = retry_buggy_code_in_parallel(
             tasks_needing_retry, 
-            max_workers=CONC,
-            # retry_count=retry_count + 1  # Pass retry count for better logging
+            max_workers=CONC
         )
         
-        # Prepare for next iteration
+        # 更新当前任务列表
         current_tasks = retried_tasks
+        
+        # 重新评估retry后的任务
+        logger.info(f"Re-evaluating {len(current_tasks)} retried tasks...")
+        bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=60)
+        all_bug_results.update(bug_results)
+        
+        # 重新分析结果（放在循环最后，确保最后一次retry有更新）
+        analysis_results = analyze_combined_results(init_results, all_bug_results)
+        
         retry_count += 1
         
-        # Save progress
+        # 保存进度
         history_data = {
             'final_tasks': current_tasks,
             'final_bug_results': all_bug_results.copy(),
@@ -736,10 +744,7 @@ def check_and_retry_buggy_tests(
         except Exception as e:
             logger.warning(f"Failed to save retry progress: {str(e)}")
     
-    # Final analysis after all retries
-    final_analysis = analyze_combined_results(init_results, all_bug_results)
-    
-    # Filter to only include tasks that were originally provided
+    # 最终过滤和返回
     final_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
     final_bug_results = {k: v for k, v in all_bug_results.items() 
                         if k in [t['new_instance_id'] for t in final_tasks]}
@@ -747,7 +752,7 @@ def check_and_retry_buggy_tests(
     logger.info(f"Buggy test evaluation completed. Total tasks: {len(final_tasks)}, "
                 f"retry iterations: {retry_count}")
     
-    # Save final results
+    # 保存最终结果
     history_data = {
         'final_tasks': final_tasks,
         'final_bug_results': final_bug_results,

@@ -1311,7 +1311,7 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
         "messages": messages,
         "temperature": temperature,
         "max_tokens": MAX_TOKENS,
-        "stream": False  # 关闭流式输出
+        "stream": True  # 启用流式输出
     }
     
     # 添加思考模式配置
@@ -1329,24 +1329,46 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
                 headers=headers,
                 json=data,
-                timeout=600  # 10-minute timeout
+                timeout=600,  # 10-minute timeout
+                stream=True   # 启用流式响应
             )
             
             if response.status_code == 200:
-                result = response.json()
+                content = ""
                 
-                if 'choices' in result and len(result['choices']) > 0:
-                    message = result['choices'][0].get('message', {})
-                    content = message.get('content', '')
-                    
-                    if content.strip():
-                        logger.info("Successfully received GLM response")
-                        return content.strip()
-                    else:
-                        logger.warning("Received empty response from GLM")
-                        return None
+                # 处理流式响应
+                for line in response.iter_lines(decode_unicode=True):
+                    if line:
+                        # 跳过心跳包
+                        if line.strip() == "data: [DONE]":
+                            break
+                        
+                        # 处理数据行
+                        if line.startswith("data: "):
+                            try:
+                                json_str = line[6:]  # 去掉"data: "前缀
+                                chunk_data = json.loads(json_str)
+                                
+                                # 检查是否有内容
+                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    choice = chunk_data['choices'][0]
+                                    delta = choice.get('delta', {})
+                                    
+                                    # 获取增量内容
+                                    if 'content' in delta and delta['content']:
+                                        content += delta['content']
+                                        
+                            except json.JSONDecodeError:
+                                continue
+                            except Exception as e:
+                                logger.error(f"Error processing streaming response: {e}")
+                                continue
+                
+                if content.strip():
+                    logger.info("Successfully received GLM response via streaming")
+                    return content.strip()
                 else:
-                    logger.error("Invalid response format from GLM API")
+                    logger.warning("Received empty response from GLM")
                     return None
             
             else:

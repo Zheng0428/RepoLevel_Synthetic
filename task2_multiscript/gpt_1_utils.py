@@ -741,7 +741,8 @@ async def retry_buggy_code_in_parallel(tasks: List[dict], max_workers: int = CON
         """处理单个任务"""
         async with semaphore:
             try:
-                # 使用asyncio.to_thread在异步环境中执行同步函数
+                # 添加延迟，比如每个任务之间间隔0.5秒
+                await asyncio.sleep(0.1)
                 result = await asyncio.to_thread(retry_buggy_code_generation_for_task, task)
                 return result
             except Exception as e:

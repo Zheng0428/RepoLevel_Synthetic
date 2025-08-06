@@ -730,7 +730,7 @@ def check_and_retry_buggy_tests(
         logger.info("Retrying buggy code generation...")
         import asyncio
         retried_tasks = asyncio.run(retry_buggy_code_in_parallel(tasks_needing_retry, max_workers=CONC))
-        # retried_tasks = await retry_buggy_code_in_parallel(
+        # retried_tasks = retry_buggy_code_in_parallel(
         #     tasks_needing_retry, 
         #     max_workers=CONC
         # )

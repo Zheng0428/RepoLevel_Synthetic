@@ -859,14 +859,8 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description='Extract bugs and evaluate GPT bug detection with retry mechanism.')
+    parser = argparse.ArgumentParser(description='Extract bugs and evaluate GPT bug detection.')
 
-    parser.add_argument('--max_retries', type=int, default=5, 
-                        help='Maximum number of retries for failed items (default: 5). Set to 1 to disable retries.')
-    parser.add_argument('--enable_retry', action='store_true', 
-                        help='Enable the retry mechanism for failed items. If not set, runs only once.')
-    parser.add_argument('--restart', action='store_true',
-                        help='Restart from saved checkpoint if available')
     parser.add_argument('--input_jsonl', type=str, default='/mnt/bn/tiktok-mm-5/aiic/users/tianyu/RepoLevel_Synthetic/data/script_ranker.jsonl',
                         help='Path to input JSONL file containing instance_id mapping')
     parser.add_argument('--output_jsonl', type=str, default=f"{GENERATE_DATA_PATH}/task2_multiscript/gpt_2_finish_bug_gpt4o_ranker.jsonl",
@@ -878,15 +872,11 @@ if __name__ == "__main__":
     
     start_time = time.time()
 
-    # --- Define intput and output file ---
+    # --- Define input and output file ---
     final_output_file = args.output_jsonl
     input_jsonl_file = args.input_jsonl
     # --- Load Initial Data ---
-    # Always load initial data from the source file
-    initial_tasks = []    
-    # if not os.path.exists(input_jsonl_file):
-    #     print(f"Warning: Input file not found: {input_jsonl_file}. Skipping.")
-    #     input_jsonl_file = input_jsonl_file.replace(".tmp", "")
+    initial_tasks = []
     try:
         with open(input_jsonl_file, 'r', encoding='utf-8') as infile:
             for line in infile:
@@ -909,46 +899,20 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # --- Initialize state variables ---
-    if args.restart:
-        logger.info("Restart mode enabled. Loading from existing output file...")
-        
-        # Load already processed task IDs and perfect tasks from output file
-        processed_ids = load_processed_ids_from_output(final_output_file)
-        all_perfect_tasks = load_perfect_tasks_from_output(final_output_file)
-        
-        # 重启模式下，不需要重建all_perfect_results，因为我们使用增量保存
-        all_perfect_results = {}  # 只用于跟踪新的结果
-        
-        # Build tasks_to_process: exclude already processed items
-        tasks_to_process = [
-            task for task in initial_tasks 
-            if task['instance_id'] not in processed_ids
-        ]
-        tasks_to_process = tasks_to_process
-        logger.info(f"Restarting with fresh attempt counting (max_retries: {args.max_retries})")
-        logger.info(f"Already processed: {len(processed_ids)} tasks")
-        logger.info(f"Remaining to process: {len(tasks_to_process)} tasks")
+    tasks_to_process = initial_tasks[:TEST_N]
+    all_perfect_results = {}
+    all_perfect_tasks = []
+    processed_ids = set()
+
+    logger.info("--- Starting Single Execution ---")
+    logger.info(f"Processing {len(tasks_to_process)} tasks.")
+
+    if not tasks_to_process:
+        logger.info("No tasks to process. Exiting.")
     else:
-        # Normal initialization
-        tasks_to_process = initial_tasks[:TEST_N]
-        all_perfect_results = {}
-        all_perfect_tasks = []
-        processed_ids = set()
-
-    # 每次都重新开始计算尝试次数
-    max_attempts = args.max_retries if args.enable_retry else 1
-    for attempt in range(1, max_attempts + 1):
-        if not tasks_to_process:
-            logger.info("No more tasks to process. Exiting retry loop.")
-            break
+        # Phase 1: Generate LLM responses using prompt reconstruction
+        logger.info("Phase 1: Generating LLM responses...")
         
-        logger.info(f"--- Starting Attempt {attempt}/{max_attempts} ---")
-        logger.info(f"Processing {len(tasks_to_process)} tasks.")
-
-        # For ALL attempts, regenerate the LLM response using prompt reconstruction
-        logger.info(f"Generating LLM responses for attempt {attempt}...")
-        
-        # Use ThreadPoolExecutor for concurrent requests with progress bar
         max_workers = min(CONC, len(tasks_to_process))
         if not args.load_history:
             print('Phase 1: Generate first round response')
@@ -961,7 +925,7 @@ if __name__ == "__main__":
                 
                 # Process completed tasks with progress bar
                 completed_tasks = []
-                desc = f"Generating LLM responses (attempt {attempt})"
+                desc = "Generating LLM responses"
                 with tqdm(total=len(tasks_to_process), desc=desc, unit="task") as pbar:
                     for future in as_completed(future_to_task):
                         try:
@@ -982,89 +946,48 @@ if __name__ == "__main__":
             print('Phase 2: Extract Patches from LLM responses')
             extracted_tasks, failed_to_parse_ids = run_extraction_phase(tasks_to_process)
             
-            # If nothing was extracted, all tasks failed parsing. Prepare them for the next retry.
             if not extracted_tasks:
-                logger.warning("No tasks were successfully extracted in this attempt.")
-                # Update tasks_to_process for the next loop
-                tasks_to_process = [
-                    task for task in initial_tasks 
-                    if task['instance_id'] in failed_to_parse_ids and task['instance_id'] not in processed_ids
-                ]
-                continue
+                logger.warning("No tasks were successfully extracted.")
         else:
             logger.info('Load history from file.')
             extracted_tasks = None
+            
         # Phase 3: Evaluate successfully extracted patches
         print('Phase 3: Evaluate successfully extracted patches')
         analysis_results = run_evaluation_phase(extracted_tasks, args.load_history)
         
-        # --- Process and Segregate Results of the Current Iteration ---
-        perfect_results_this_iter = analysis_results.get('perfect_tests', {})
-        logger.info(f"Attempt {attempt}: Found {len(perfect_results_this_iter)} new instances with perfect tests.")
+        # --- Process and save results ---
+        perfect_results = analysis_results.get('perfect_tests', {})
+        logger.info(f"Found {len(perfect_results)} instances with perfect tests.")
         
-        # Add successful results to the main collection
-        all_perfect_results.update(perfect_results_this_iter)
-        
-        # Collect the full task data for the successful items and mark as processed
-        perfect_ids_this_iter = set(perfect_results_this_iter.keys())
-        for task in extracted_tasks:
-            if task['instance_id'] in perfect_ids_this_iter and task['instance_id'] not in processed_ids:
-                all_perfect_tasks.append(task)
-                processed_ids.add(task['instance_id'])
-
-        # --- Save progress after each iteration ---
-        if perfect_results_this_iter:  # 只保存本次迭代新产生的完美结果
-            # 只为本次迭代的成功任务保存结果
-            current_iter_perfect_tasks = [
-                task for task in extracted_tasks 
-                if task['instance_id'] in perfect_ids_this_iter and task['instance_id'] not in processed_ids
+        # Collect the full task data for the successful items
+        perfect_ids = set(perfect_results.keys())
+        if extracted_tasks:
+            current_perfect_tasks = [
+                task for task in extracted_tasks
+                if task['instance_id'] in perfect_ids
             ]
             
-            if current_iter_perfect_tasks:
-                # 追加保存本次的结果到输出文件（无缝衔接已有数据）
+            if current_perfect_tasks:
                 append_results_to_jsonl(
-                    perfect_results_this_iter,
-                    current_iter_perfect_tasks,
+                    perfect_results,
+                    current_perfect_tasks,
                     final_output_file
                 )
-                logger.info(f"Progress saved: {len(current_iter_perfect_tasks)} new perfect tasks appended to {final_output_file}")
+                logger.info(f"Results saved: {len(current_perfect_tasks)} perfect tasks appended to {final_output_file}")
 
-        # --- Prepare for the Next Iteration ---
-        # Identify all tasks that were evaluated in this iteration
-        evaluated_ids_this_iter = set(perfect_results_this_iter.keys()) | \
-                                  set(analysis_results.get('init_failed', {}).keys()) | \
-                                  set(analysis_results.get('bug_not_detected', {}).keys()) | \
-                                  set(analysis_results.get('other_cases', {}).keys())
+    # --- Finalization ---
+    logger.info("="*20 + " Execution Finished " + "="*20)
 
-        # An evaluation failure is an evaluated task that wasn't 'perfect'
-        evaluation_failed_ids = evaluated_ids_this_iter - perfect_ids_this_iter
-        
-        # A task fails this iteration if it failed parsing OR failed evaluation
-        all_failed_ids_this_iter = evaluation_failed_ids | failed_to_parse_ids
-        
-        # Filter the original complete task list to get the ones that need retrying
-        tasks_to_process = [
-            task for task in initial_tasks[:TEST_N]
-            if task['instance_id'] not in processed_ids
-        ]
-        
-        logger.info(f"End of Attempt {attempt}. Total successful instances: {len(all_perfect_tasks)}.")
-        if attempt < max_attempts:
-            logger.info(f"{len(tasks_to_process)} tasks remaining for next attempt.")
-
-    # --- Finalization after all attempts ---
-    logger.info("="*20 + " All Attempts Finished " + "="*20)
-
-    # 统计最终结果（从文件读取，包括之前和本次处理的所有数据）
+    # 统计最终结果
     final_all_perfect_tasks = load_perfect_tasks_from_output(final_output_file)
     
     if final_all_perfect_tasks:
         logger.info(f"Final analysis complete. Log files saved to {EXP_PATH}")
-        logger.info(f"Total unique perfect instances found across all attempts: {len(final_all_perfect_tasks)}")
+        logger.info(f"Total unique perfect instances found: {len(final_all_perfect_tasks)}")
         logger.info(f"Final unittest data saved to: {final_output_file}")
-        logger.info(f"Final data count: {len(final_all_perfect_tasks)}")
     else:
-        logger.warning("No 'perfect tests' were found in any attempt. The output file will be empty.")
+        logger.warning("No 'perfect tests' were found. The output file will be empty.")
         # Create an empty file to signify completion
         open(final_output_file, 'w').close()
 

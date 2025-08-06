@@ -927,7 +927,7 @@ def append_results_to_jsonl(perfect_tests_results: dict, original_data: list, ou
     # 创建输出数据
     output_data = []
     for data in original_data:
-        instance_id = data['instance_id']
+        instance_id = data['new_instance_id']
         if instance_id in perfect_tests_results:
             result_data = perfect_tests_results[instance_id]
             new_data = data.copy()

@@ -844,7 +844,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     final_tasks, final_bug_results = check_and_retry_buggy_tests(
         filtered_final_tasks, 
         filtered_final_init_results, 
-        max_retries=8, 
+        max_retries=7, 
         load_history=load_history
     )
     
@@ -852,7 +852,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     logger.info("Analyzing final combined results...")
     analysis_results = analyze_combined_results(filtered_final_init_results, final_bug_results)
 
-    return analysis_results
+    return analysis_results, final_tasks
 
 # ================== Main Execution ==================
 
@@ -954,7 +954,7 @@ if __name__ == "__main__":
             
         # Phase 3: Evaluate successfully extracted patches
         print('Phase 3: Evaluate successfully extracted patches')
-        analysis_results = run_evaluation_phase(extracted_tasks, args.load_history)
+        analysis_results, final_tasks = run_evaluation_phase(extracted_tasks, args.load_history)
         
         # --- Process and save results ---
         perfect_results = analysis_results.get('perfect_tests', {})
@@ -962,12 +962,12 @@ if __name__ == "__main__":
         
         # Collect the full task data for the successful items
         perfect_ids = set(perfect_results.keys())
-        if extracted_tasks:
+        if final_tasks:
             current_perfect_tasks = [
-                task for task in extracted_tasks
-                if task['instance_id'] in perfect_ids
+                task for task in final_tasks
+                if task['new_instance_id'] in perfect_ids
             ]
-            
+            # 存储
             if current_perfect_tasks:
                 append_results_to_jsonl(
                     perfect_results,

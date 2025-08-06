@@ -844,7 +844,7 @@ def run_evaluation_phase(tasks_to_evaluate: List[dict], load_history: bool):
     final_tasks, final_bug_results = check_and_retry_buggy_tests(
         filtered_final_tasks, 
         filtered_final_init_results, 
-        max_retries=5, 
+        max_retries=8, 
         load_history=load_history
     )
     

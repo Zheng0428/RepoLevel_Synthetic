@@ -1374,25 +1374,25 @@ def get_glm_response(prompt: str, model: str = "glm-4.5", temperature: float = 0
             else:
                 logger.error(f"GLM API request failed with status code: {response.status_code}")
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(5)
                 continue
                 
         except requests.exceptions.Timeout:
             logger.error(f"GLM API request timed out (attempt {attempt + 1})")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(5)
             continue
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Error calling GLM API: {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(5)
             continue
             
         except Exception as e:
             logger.error(f"Unexpected error in GLM API call: {e}")
             if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(5)
             continue
     
     print("All retry attempts failed for GLM")

@@ -671,37 +671,66 @@ def check_and_retry_buggy_tests(
     history_data = None
     
     # 应该这样实现历史数据加载逻辑：
-    # 应该这样实现：
     if load_history and os.path.exists(history_file):
         try:
             with open(history_file, 'r', encoding='utf-8') as f:
                 history_data = json.load(f)
             
             current_iteration = history_data.get('iteration', 0)
+            saved_all_bug_results = history_data.get('all_bug_results', {})
             saved_final_tasks = history_data.get('final_tasks', [])
             saved_bug_results = history_data.get('final_bug_results', {})
             
-            if current_iteration >= max_retries:
-                # 返回历史bug检测结果
-                return saved_final_tasks, saved_bug_results
-            else:
-                current_tasks = saved_final_tasks  # 使用历史任务列表
+            if saved_all_bug_results:
+                # 使用完整的all_bug_results
+                all_bug_results.update(saved_all_bug_results)
+                
+                # 检查是否所有任务都已完成
+                all_tasks_complete = all(
+                    task['new_instance_id'] in saved_all_bug_results 
+                    for task in tasks_to_evaluate
+                )
+                
+                if all_tasks_complete or current_iteration >= max_retries:
+                    logger.info(f"Loaded complete bug results from history: {len(saved_all_bug_results)} tasks")
+                    return saved_final_tasks, saved_all_bug_results
+                
+                # 找出未完成的任务
+                incomplete_tasks = [
+                    task for task in tasks_to_evaluate 
+                    if task['new_instance_id'] not in saved_all_bug_results
+                ]
+                
+                if not incomplete_tasks:
+                    logger.info("All tasks completed in history")
+                    return saved_final_tasks, saved_all_bug_results
+                
+                current_tasks = incomplete_tasks
                 retry_count = current_iteration
-                all_bug_results = saved_bug_results
+                logger.info(f"Loaded history: {len(saved_all_bug_results)} completed, "
+                           f"{len(incomplete_tasks)} remaining tasks")
                 
-                logger.info(f"Loaded history: {len(current_tasks)} tasks, "
-                           f"starting from retry {retry_count + 1}")
-                
+            else:
+                # 兼容旧版本
+                if current_iteration >= max_retries:
+                    return saved_final_tasks, saved_bug_results
+                else:
+                    current_tasks = saved_final_tasks
+                    retry_count = current_iteration
+                    all_bug_results = saved_bug_results
+                    
         except Exception as e:
             logger.warning(f"Failed to load history: {str(e)}, starting fresh")
     
-    # 初始运行：在循环开始前先运行一次
-    logger.info(f"=== Initial Buggy Test Evaluation ===")
-    logger.info(f"Processing {len(current_tasks)} tasks...")
-    
-    # 运行初始GPT bug评估
-    bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=60)
-    all_bug_results.update(bug_results)
+    # 只有在没有历史结果时才运行初始评估
+    if not all_bug_results:
+        logger.info(f"=== Initial Buggy Test Evaluation ===")
+        logger.info(f"Processing {len(current_tasks)} tasks...")
+        
+        bug_results = test_gpt_bug(current_tasks, max_workers=CONC, timeout=60)
+        all_bug_results.update(bug_results)
+    else:
+        logger.info(f"=== Skipping Initial Buggy Test Evaluation (loaded from history) ===")
     
     # 分析初始结果
     analysis_results = analyze_combined_results(init_results, all_bug_results)
@@ -750,12 +779,12 @@ def check_and_retry_buggy_tests(
         
         # 保存进度 
         filtered_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
-        filtered_bug_results = {k: v for k, v in all_bug_results.items() 
-                             if k in [t['new_instance_id'] for t in filtered_tasks]}
         
         history_data = {
             'final_tasks': filtered_tasks,
-            'final_bug_results': filtered_bug_results,
+            'final_bug_results': {k: v for k, v in all_bug_results.items() 
+                               if k in [t['new_instance_id'] for t in filtered_tasks]},
+            'all_bug_results': all_bug_results,
             'iteration': retry_count
         }
         
@@ -767,17 +796,14 @@ def check_and_retry_buggy_tests(
             logger.warning(f"Failed to save retry progress: {str(e)}")
     
     # 最终过滤和返回
-    final_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
-    final_bug_results = {k: v for k, v in all_bug_results.items() 
-                        if k in [t['new_instance_id'] for t in final_tasks]}
-    
-    logger.info(f"Buggy test evaluation completed. Total tasks: {len(final_tasks)}, "
-                f"retry iterations: {retry_count}")
-    
     # 保存最终结果
+    final_tasks = [t for t in tasks_to_evaluate if t['new_instance_id'] in all_bug_results]
+    
     history_data = {
         'final_tasks': final_tasks,
-        'final_bug_results': final_bug_results,
+        'final_bug_results': {k: v for k, v in all_bug_results.items() 
+                           if k in [t['new_instance_id'] for t in final_tasks]},
+        'all_bug_results': all_bug_results,
         'iteration': retry_count
     }
     
@@ -788,7 +814,7 @@ def check_and_retry_buggy_tests(
     except Exception as e:
         logger.warning(f"Failed to save final buggy test history: {str(e)}")
     
-    return final_tasks, final_bug_results
+    return final_tasks, all_bug_results
 
 
 
